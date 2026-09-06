@@ -1,12 +1,15 @@
 # Secrets — niemals committen
 .env
 video-use/.env
+web/.env.local
 
 # Dependencies
 node_modules/
 __pycache__/
 .venv/
 video-use/.venv/
+web/node_modules/
+web/.next/
 
 # Rohvideos
 raw/*.mp4
@@ -34,3 +37,6 @@ Thumbs.db
 # Skill-Junctions -- reproduzierbar per Setup (npm install + Junction-Erstellung),
 # kein echter Inhalt, sonst dupliziert Git node_modules/video-use komplett
 .claude/skills/
+
+# Lokaler Harness-State, kein Projekt-Inhalt
+.claude/scheduled_tasks.lock
