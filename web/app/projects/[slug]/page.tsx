@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { UploadForm } from "@/components/UploadForm";
 import { CopyButton } from "@/components/CopyButton";
-import { VIDEO_BUCKET } from "@/lib/constants";
+import { VIDEO_BUCKET, isImageFilename } from "@/lib/constants";
 
 export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -32,7 +32,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     ? `New-Item -ItemType Directory -Force raw\\${slug} | Out-Null\nInvoke-WebRequest -Uri "${signedUrl}" -OutFile "raw\\${slug}\\${project.video_filename}"`
     : "";
 
-  const editPrompt = `Edit @raw/${slug}/${project.video_filename} in eine Folge mit Brand default.`;
+  const isImage = hasVideo && isImageFilename(project.video_filename ?? "");
+
+  const editPrompt = isImage
+    ? `Nutze @raw/${slug}/${project.video_filename} als Bildmaterial fuer eine Animation mit Brand default.`
+    : `Edit @raw/${slug}/${project.video_filename} in eine Folge mit Brand default.`;
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -46,7 +50,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       {hasVideo && signedUrl && (
         <div className="space-y-6">
           <div className="card">
-            <p className="text-sm text-white/50">Video</p>
+            <p className="text-sm text-white/50">{isImage ? "Bild" : "Video"}</p>
             <p className="mt-1 font-medium">{project.video_filename}</p>
           </div>
 

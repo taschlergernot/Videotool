@@ -81,10 +81,10 @@ export function UploadForm({ slug }: { slug: string }) {
 
   return (
     <div className="card">
-      <label className="label">Video hochladen</label>
+      <label className="label">Video oder Bild hochladen</label>
       <input
         type="file"
-        accept="video/*"
+        accept="video/*,image/*"
         disabled={status === "uploading"}
         onChange={(e) => {
           const file = e.target.files?.[0];
