@@ -2,7 +2,22 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { UploadForm } from "@/components/UploadForm";
 import { CopyButton } from "@/components/CopyButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { CheckpointApproval } from "@/components/CheckpointApproval";
+import { startAutomatedJob } from "@/app/projects/actions";
 import { VIDEO_BUCKET, isImageFilename } from "@/lib/constants";
+
+const JOB_STATUS_LABELS: Record<string, string> = {
+  queued: "In der Warteschlange",
+  claimed: "Wird abgeholt",
+  running: "Läuft",
+  awaiting_approval: "Wartet auf deine Freigabe",
+  done: "Fertig",
+  failed: "Fehlgeschlagen",
+  cancelled: "Abgebrochen",
+};
+
+const ACTIVE_JOB_STATUSES = ["queued", "claimed", "running", "awaiting_approval"];
 
 export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -19,6 +34,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   }
 
   const hasVideo = Boolean(project.video_storage_path);
+  const isImage = hasVideo && isImageFilename(project.video_filename ?? "");
 
   let signedUrl: string | null = null;
   if (hasVideo) {
@@ -28,7 +44,35 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     signedUrl = data?.signedUrl ?? null;
   }
 
-  const isImage = hasVideo && isImageFilename(project.video_filename ?? "");
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("project_id", project.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let pendingCheckpoint: {
+    id: string;
+    type: string;
+    title_de: string;
+    summary_de: string;
+    payload: unknown;
+  } | null = null;
+
+  if (job?.status === "awaiting_approval") {
+    const { data } = await supabase
+      .from("job_checkpoints")
+      .select("*")
+      .eq("job_id", job.id)
+      .eq("status", "pending")
+      .order("seq", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    pendingCheckpoint = data;
+  }
+
+  const jobIsActive = job ? ACTIVE_JOB_STATUSES.includes(job.status) : false;
 
   const downloadStep = signedUrl
     ? `Lade zuerst die Datei von ${signedUrl} nach raw/${slug}/${project.video_filename} herunter ` +
@@ -47,6 +91,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto max-w-2xl p-6">
+      {jobIsActive && <AutoRefresh />}
+
       <a href="/" className="text-sm text-white/50 hover:text-white/80">
         ← Projekte
       </a>
@@ -61,26 +107,84 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
             <p className="mt-1 font-medium">{project.video_filename}</p>
           </div>
 
-          <div className="card space-y-4 border-blue-500/30 bg-blue-500/[0.04]">
+          {!isImage && (
+            <div className="card space-y-4">
+              <div>
+                <p className="text-base font-semibold">Automatischer Video-Bearbeitungs-Worker</p>
+                <p className="mt-1 text-sm text-white/50">
+                  Ein lokaler Prozess auf deinem Rechner transkribiert, erkennt Versprecher,
+                  schneidet und rendert automatisch -- fuer die Pflicht-Checkpoints (Cut-Plan-
+                  Bestaetigung, Self-Eval) bekommst du hier eine Freigabe-Anfrage. Nutzt echtes
+                  Claude-API- und ElevenLabs-Kontingent, sobald ein Auftrag laeuft -- nicht im
+                  Claude-Code-Abo enthalten.
+                </p>
+              </div>
+
+              {!job || !jobIsActive ? (
+                <form action={startAutomatedJob.bind(null, slug)}>
+                  <button type="submit" className="btn w-full py-3 text-base">
+                    ▶ Automatische Bearbeitung starten
+                  </button>
+                </form>
+              ) : (
+                <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <span className="badge bg-blue-500/15 text-blue-300">
+                    {JOB_STATUS_LABELS[job.status] ?? job.status}
+                  </span>
+                  {job.phase && <p className="mt-2 text-sm text-white/50">{job.phase}</p>}
+                </div>
+              )}
+
+              {job?.status === "failed" && (
+                <p className="text-sm text-red-400">{job.error_message}</p>
+              )}
+
+              {job?.status === "done" && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3">
+                  <p className="text-sm font-medium text-emerald-300">Fertig</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-white/70">
+                    {job.result_summary_de}
+                  </p>
+                  {job.result_video_path && (
+                    <p className="mt-2 text-xs text-white/40">
+                      Lokale Datei: {job.result_video_path}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {pendingCheckpoint && (
+                <CheckpointApproval
+                  checkpointId={pendingCheckpoint.id}
+                  slug={slug}
+                  type={pendingCheckpoint.type}
+                  titleDe={pendingCheckpoint.title_de}
+                  summaryDe={pendingCheckpoint.summary_de}
+                  payload={pendingCheckpoint.payload}
+                />
+              )}
+            </div>
+          )}
+
+          <div className="card space-y-4">
             <div>
               <p className="text-base font-semibold">
-                {isImage ? "Bild-Animation starten" : "Video-Bearbeitung starten"}
+                {isImage ? "Bild-Animation starten" : "Manueller Modus (Fallback)"}
               </p>
               <p className="mt-1 text-sm text-white/50">
                 {isImage
                   ? "Kopiert den Befehl fuer Claude Code -- Download und Animation in einem Schritt."
-                  : "Kopiert den kompletten Auftrag fuer Claude Code: Download, Schnitt, " +
-                    "Transkription, Untertitel und Hyperframes-Animationen. Die " +
-                    "Pflicht-Checkpoints (Cut-Plan-Bestaetigung, Storyboard-Freigabe) bleiben " +
-                    "interaktiv -- du bestaetigst sie dort auf Deutsch."}
+                  : "Kopiert den kompletten Auftrag zum manuellen Einfuegen in eine lokale " +
+                    "Claude-Code-Chat-Session, falls du nicht auf den automatischen Worker " +
+                    "warten willst."}
               </p>
             </div>
 
             <CopyButton
               text={startPrompt}
-              label={isImage ? "▶ Bild-Animation starten" : "▶ Video-Bearbeitung starten"}
+              label={isImage ? "▶ Bild-Animation starten" : "Auftrag kopieren"}
               copiedLabel="✓ Kopiert -- jetzt in Claude Code einfuegen"
-              className="btn w-full py-3 text-base"
+              className={isImage ? "btn w-full py-3 text-base" : "btn-secondary w-full"}
             />
 
             <details className="text-sm text-white/50">
