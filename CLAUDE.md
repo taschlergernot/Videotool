@@ -249,3 +249,24 @@ refused mit `[StaticGuard] Invalid HyperFrame contract`.
   `helpers/`-Skripte, kein importierbares Modul. Zum Prüfen der Installation stattdessen
   `python ./video-use/helpers/render.py --help` aufrufen.
 - `Start-Process projects\...\clips\edited.mp4` öffnet das Video im Default-Player zur Review.
+- **Multi-Line-Daten an native Prozesse pipen (`|`) ist in dieser Sandbox unzuverlässig.**
+  Getestet an `git credential approve`: PowerShell hängt ein BOM vor die erste Zeile und
+  bricht offenbar auch mehrzeiligen Input ab (`fatal: refusing to work with credential
+  missing protocol field`, dann `unable to read credential from stdin`) — betrifft sowohl
+  `Get-Content | cmd`, `"text" | cmd` als auch `.NET Process.StandardInput` (StreamWriter,
+  BOM-behaftet) **und** git.exe's eigene Weiterleitung an seinen konfigurierten
+  `credential.helper`-Subprozess (nochmal eine Ebene BOM/Truncation).
+  **Fix:** den Ziel-Befehl **direkt** aufrufen statt über eine Zwischenschicht, und Bytes
+  **roh** schreiben statt über einen StreamWriter:
+  ```powershell
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = "C:\Program Files\Git\mingw64\bin\git-credential-manager.exe"
+  $psi.Arguments = "store"   # nicht "git credential approve" -- eine Ebene weniger
+  $psi.RedirectStandardInput = $true; $psi.UseShellExecute = $false
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes("protocol=https`nhost=github.com`nusername=...`npassword=...`n`n")
+  $proc.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)  # BaseStream, kein StreamWriter -- kein BOM
+  $proc.StandardInput.BaseStream.Flush(); $proc.StandardInput.Close()
+  ```
+  Danach greift der Credential Manager wie gewohnt — `git push`/`git pull` fragen nicht mehr
+  nach einem Token.
