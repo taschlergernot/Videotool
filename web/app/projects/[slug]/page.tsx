@@ -36,7 +36,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const editPrompt = isImage
     ? `Nutze @raw/${slug}/${project.video_filename} als Bildmaterial fuer eine Animation mit Brand default.`
-    : `Edit @raw/${slug}/${project.video_filename} in eine Folge mit Brand default.`;
+    : `Starte die automatische Bearbeitung fuer @raw/${slug}/${project.video_filename}: transkribiere automatisch (ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, schneide automatisch, brenne die erkannte Sprache als Untertitel, und baue anschliessend Animationen mit Hyperframes -- mit Brand default. Halte dich dabei an die Pflicht-Checkpoints aus CLAUDE.md (Cut-Plan-Bestaetigung auf Deutsch vor dem Schnitt, Storyboard-Freigabe vor den Compositions, Self-Eval nach dem Render).`;
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -63,7 +63,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           </div>
 
           <div className="card space-y-3">
-            <p className="label !mb-0">2. In Claude Code einfuegen</p>
+            <p className="label !mb-0">
+              2. {isImage ? "In Claude Code einfuegen" : "Automatische Bearbeitung starten"}
+            </p>
+            {!isImage && (
+              <p className="text-sm text-white/50">
+                Schnitt, Transkription, Untertitel und Hyperframes-Animationen laufen
+                nacheinander -- die Pflicht-Checkpoints (Cut-Plan-Bestaetigung, Storyboard-
+                Freigabe) bleiben interaktiv im Chat, du bestaetigst sie dort auf Deutsch.
+              </p>
+            )}
             <pre className="overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-white/80">
               {editPrompt}
             </pre>
