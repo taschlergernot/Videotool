@@ -28,15 +28,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     signedUrl = data?.signedUrl ?? null;
   }
 
-  const downloadCommand = signedUrl
-    ? `New-Item -ItemType Directory -Force raw\\${slug} | Out-Null\nInvoke-WebRequest -Uri "${signedUrl}" -OutFile "raw\\${slug}\\${project.video_filename}"`
-    : "";
-
   const isImage = hasVideo && isImageFilename(project.video_filename ?? "");
 
-  const editPrompt = isImage
-    ? `Nutze @raw/${slug}/${project.video_filename} als Bildmaterial fuer eine Animation mit Brand default.`
-    : `Starte die automatische Bearbeitung fuer @raw/${slug}/${project.video_filename}: transkribiere automatisch (ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, schneide automatisch, brenne die erkannte Sprache als Untertitel, und baue anschliessend Animationen mit Hyperframes -- mit Brand default. Halte dich dabei an die Pflicht-Checkpoints aus CLAUDE.md (Cut-Plan-Bestaetigung auf Deutsch vor dem Schnitt, Storyboard-Freigabe vor den Compositions, Self-Eval nach dem Render).`;
+  const downloadStep = signedUrl
+    ? `Lade zuerst die Datei von ${signedUrl} nach raw/${slug}/${project.video_filename} herunter ` +
+      `(PowerShell: New-Item -ItemType Directory -Force raw\\${slug} | Out-Null; ` +
+      `Invoke-WebRequest -Uri "${signedUrl}" -OutFile "raw\\${slug}\\${project.video_filename}").`
+    : "";
+
+  const startPrompt = isImage
+    ? `${downloadStep} Nutze die Datei anschliessend als Bildmaterial fuer eine Animation mit Brand default.`
+    : `${downloadStep} Starte danach die automatische Bearbeitung: transkribiere automatisch ` +
+      `(ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, schneide automatisch, brenne ` +
+      `die erkannte Sprache als Untertitel, und baue anschliessend Animationen mit Hyperframes ` +
+      `-- mit Brand default. Halte dich dabei an die Pflicht-Checkpoints aus CLAUDE.md ` +
+      `(Cut-Plan-Bestaetigung auf Deutsch vor dem Schnitt, Storyboard-Freigabe vor den ` +
+      `Compositions, Self-Eval nach dem Render).`;
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -54,29 +61,34 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
             <p className="mt-1 font-medium">{project.video_filename}</p>
           </div>
 
-          <div className="card space-y-3">
-            <p className="label !mb-0">1. Lokal herunterladen (PowerShell, im Projekt-Root)</p>
-            <pre className="overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-white/80">
-              {downloadCommand}
-            </pre>
-            <CopyButton text={downloadCommand} />
-          </div>
-
-          <div className="card space-y-3">
-            <p className="label !mb-0">
-              2. {isImage ? "In Claude Code einfuegen" : "Automatische Bearbeitung starten"}
-            </p>
-            {!isImage && (
-              <p className="text-sm text-white/50">
-                Schnitt, Transkription, Untertitel und Hyperframes-Animationen laufen
-                nacheinander -- die Pflicht-Checkpoints (Cut-Plan-Bestaetigung, Storyboard-
-                Freigabe) bleiben interaktiv im Chat, du bestaetigst sie dort auf Deutsch.
+          <div className="card space-y-4 border-blue-500/30 bg-blue-500/[0.04]">
+            <div>
+              <p className="text-base font-semibold">
+                {isImage ? "Bild-Animation starten" : "Video-Bearbeitung starten"}
               </p>
-            )}
-            <pre className="overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-white/80">
-              {editPrompt}
-            </pre>
-            <CopyButton text={editPrompt} />
+              <p className="mt-1 text-sm text-white/50">
+                {isImage
+                  ? "Kopiert den Befehl fuer Claude Code -- Download und Animation in einem Schritt."
+                  : "Kopiert den kompletten Auftrag fuer Claude Code: Download, Schnitt, " +
+                    "Transkription, Untertitel und Hyperframes-Animationen. Die " +
+                    "Pflicht-Checkpoints (Cut-Plan-Bestaetigung, Storyboard-Freigabe) bleiben " +
+                    "interaktiv -- du bestaetigst sie dort auf Deutsch."}
+              </p>
+            </div>
+
+            <CopyButton
+              text={startPrompt}
+              label={isImage ? "▶ Bild-Animation starten" : "▶ Video-Bearbeitung starten"}
+              copiedLabel="✓ Kopiert -- jetzt in Claude Code einfuegen"
+              className="btn w-full py-3 text-base"
+            />
+
+            <details className="text-sm text-white/50">
+              <summary className="cursor-pointer hover:text-white/70">Auftrag anzeigen</summary>
+              <pre className="mt-3 overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-white/80">
+                {startPrompt}
+              </pre>
+            </details>
           </div>
         </div>
       )}
