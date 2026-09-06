@@ -1,0 +1,36 @@
+# Secrets — niemals committen
+.env
+video-use/.env
+
+# Dependencies
+node_modules/
+__pycache__/
+.venv/
+video-use/.venv/
+
+# Rohvideos
+raw/*.mp4
+raw/*.mov
+raw/*.mkv
+raw/**/*.mp4
+raw/**/*.mov
+raw/**/*.mkv
+
+# Projekt-Outputs
+projects/*/renders/*.mp4
+projects/*/previews/*.mp4
+projects/*/transcripts/*.json
+projects/*/clips/*.mp4
+projects/*/_bundle_assets/
+projects/*/assets/speaker.mp4
+
+# Caches
+.hyperframes-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Skill-Junctions -- reproduzierbar per Setup (npm install + Junction-Erstellung),
+# kein echter Inhalt, sonst dupliziert Git node_modules/video-use komplett
+.claude/skills/
