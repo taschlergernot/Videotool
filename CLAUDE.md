@@ -13,6 +13,10 @@ diese Datei ist die Arbeitsanleitung für den laufenden Betrieb.
 - **Plan-Bestätigung auf Deutsch, Plain Language** vor jedem Cut und vor jeder Composition.
   Kein Markup-Slang, keine Fachjargon-Wand. Erst nach User-OK rendern.
 - Outputs landen unter `projects/<name>/renders/` — **niemals** in Repo-Root oder `raw/`.
+- **Neue Projekte rendern standardmäßig 9:16 (1080×1920)**, nicht mehr 16:9 — nutzerseitig am
+  2026-09-08 festgelegt. 16:9 (1920×1080) nur noch, wenn der Nutzer explizit danach fragt
+  (z.B. "im Querformat" / "16:9" / "Desktop"). Gilt für video-use-Cuts genauso wie für
+  Hyperframes-Compositions und Ad-hoc-ffmpeg-Renders (z.B. Teaser, Zusammenschnitte).
 - `.env` niemals committen. Key niemals im Chat-Output zeigen.
 - **`.env`-Sync:** wenn `./.env` und `./video-use/.env` divergieren → syncen.
   **Projekt-Root ist die Wahrheit.** Auch dann den Wert nicht loggen.

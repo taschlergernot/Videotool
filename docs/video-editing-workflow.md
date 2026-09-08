@@ -153,8 +153,8 @@ npx hyperframes preview     # Studio auf localhost:3002
 npx hyperframes render
 ```
 
-Output nach `projects/<projekt>/renders/final.mp4` — 1920×1080 @ 30fps default,
-1080×1920 für Shorts.
+Output nach `projects/<projekt>/renders/final.mp4` — 1080×1920 @ 30fps default (seit
+2026-09-08), 1920×1080 nur auf ausdrücklichen Wunsch (Querformat/16:9/Desktop).
 
 ---
 
