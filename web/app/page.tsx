@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
 import { NewProjectForm } from "@/components/NewProjectForm";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { VIDEO_BUCKET, isImageFilename } from "@/lib/constants";
 
 export default async function DashboardPage() {
@@ -82,22 +83,7 @@ export default async function DashboardPage() {
                 </span>
               </div>
 
-              {previewUrl &&
-                (isImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={previewUrl}
-                    alt={p.name}
-                    className="mt-3 max-h-72 w-full rounded-lg bg-black/20 object-contain"
-                  />
-                ) : (
-                  <video
-                    src={previewUrl}
-                    controls
-                    preload="metadata"
-                    className="mt-3 w-full rounded-lg bg-black/20"
-                  />
-                ))}
+              {previewUrl && <VideoThumbnail url={previewUrl} isImage={isImage} label={p.name} />}
             </div>
           );
         })}
