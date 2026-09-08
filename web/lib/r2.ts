@@ -15,5 +15,9 @@ export function createR2Client(): S3Client {
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId, secretAccessKey },
+    // Ohne das nutzt der SDK Virtual-Hosted-Style
+    // (videotool.<account>.r2.cloudflarestorage.com), das auf R2s generischem
+    // Account-Endpoint ohne eigene Domain nicht auflöst.
+    forcePathStyle: true,
   });
 }
