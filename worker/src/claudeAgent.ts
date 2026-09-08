@@ -16,6 +16,14 @@ const ALLOWED_BASH_PREFIXES = [
 ];
 
 const allowlistCanUseTool: CanUseTool = async (toolName, input) => {
+  // Der Checkpoint-Mechanismus selbst muss durch -- das IST der kontrollierte
+  // Pflicht-Checkpoint, keine freie Aktion. Ohne diesen Fall wuerde canUseTool
+  // ihn wie jedes andere unbekannte Tool ablehnen und der Agent kaeme nie bis
+  // zur Freigabe-Anfrage (echter Bug, per erstem Testlauf gefunden).
+  if (toolName === CHECKPOINT_HOOK_MATCHER) {
+    return { behavior: "allow", updatedInput: input };
+  }
+
   if (toolName === "Bash") {
     const cmd = String((input as { command?: string }).command ?? "").trim();
     if (!ALLOWED_BASH_PREFIXES.some((re) => re.test(cmd))) {
