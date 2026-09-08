@@ -19,13 +19,27 @@ raw/**/*.mp4
 raw/**/*.mov
 raw/**/*.mkv
 
-# Projekt-Outputs
-projects/*/renders/*.mp4
-projects/*/previews/*.mp4
-projects/*/transcripts/*.json
-projects/*/clips/*.mp4
+# Projekt-Outputs -- Kunden-Content, nie committen. Blanket-Ausschluss statt
+# einzelner Dateiendungen (traf z.B. keine .ttf/.txt-Hilfsdateien) -- nur die
+# Ordnerstruktur bleibt via .gitkeep erhalten.
+projects/*/renders/*
+projects/*/previews/*
+projects/*/transcripts/*
+projects/*/clips/*
+projects/*/assets/*
 projects/*/_bundle_assets/
-projects/*/assets/speaker.mp4
+!projects/*/renders/.gitkeep
+!projects/*/previews/.gitkeep
+!projects/*/transcripts/.gitkeep
+!projects/*/clips/.gitkeep
+!projects/*/assets/.gitkeep
+
+# Lose Arbeitsdateien direkt unter projects/<name>/ (EDL, gepacktes Transkript,
+# Claude-Design-Transkript-Export) -- ebenfalls Kunden-Content, nie committen.
+projects/*/edl.json
+projects/*/takes_packed.md
+projects/*/output_transcript.md
+projects/*/output_transcript.json
 
 # Caches
 .hyperframes-cache/
