@@ -4,8 +4,9 @@ import { UploadForm } from "@/components/UploadForm";
 import { CopyButton } from "@/components/CopyButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { CheckpointApproval } from "@/components/CheckpointApproval";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { startAutomatedJob } from "@/app/projects/actions";
-import { getProjectPreviewUrl } from "@/lib/videoUrl";
+import { getAssetPreviewUrl } from "@/lib/videoUrl";
 import { isImageFilename } from "@/lib/constants";
 
 const JOB_STATUS_LABELS: Record<string, string> = {
@@ -34,10 +35,24 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     notFound();
   }
 
-  const hasVideo = Boolean(project.video_storage_path || project.video_r2_key);
-  const isImage = hasVideo && isImageFilename(project.video_filename ?? "");
+  const { data: assets } = await supabase
+    .from("project_assets")
+    .select("*")
+    .eq("project_id", project.id)
+    .order("uploaded_at", { ascending: true });
 
-  const signedUrl = hasVideo ? await getProjectPreviewUrl(supabase, project, 60 * 60 * 24) : null;
+  const assetsWithUrls = await Promise.all(
+    (assets ?? []).map(async (asset) => ({
+      ...asset,
+      previewUrl: await getAssetPreviewUrl(supabase, asset, 60 * 60 * 24),
+      isImage: isImageFilename(asset.filename),
+    }))
+  );
+
+  // Der automatische Worker (Phase 1) und der manuelle Fallback-Prompt
+  // arbeiten mit genau einer Video-Datei -- das erste hochgeladene Video
+  // (nicht Bild) im Projekt gilt als die primaere Datei dafuer.
+  const primaryVideo = assetsWithUrls.find((a) => !a.isImage);
 
   const { data: job } = await supabase
     .from("jobs")
@@ -69,20 +84,20 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const jobIsActive = job ? ACTIVE_JOB_STATUSES.includes(job.status) : false;
 
-  const downloadStep = signedUrl
-    ? `Lade zuerst die Datei von ${signedUrl} nach raw/${slug}/${project.video_filename} herunter ` +
-      `(PowerShell: New-Item -ItemType Directory -Force raw\\${slug} | Out-Null; ` +
-      `Invoke-WebRequest -Uri "${signedUrl}" -OutFile "raw\\${slug}\\${project.video_filename}").`
+  const downloadStep = primaryVideo?.previewUrl
+    ? `Lade zuerst die Datei von ${primaryVideo.previewUrl} nach raw/${slug}/${primaryVideo.filename} ` +
+      `herunter (PowerShell: New-Item -ItemType Directory -Force raw\\${slug} | Out-Null; ` +
+      `Invoke-WebRequest -Uri "${primaryVideo.previewUrl}" -OutFile "raw\\${slug}\\${primaryVideo.filename}").`
     : "";
 
-  const startPrompt = isImage
-    ? `${downloadStep} Nutze die Datei anschliessend als Bildmaterial fuer eine Animation mit Brand default.`
-    : `${downloadStep} Starte danach die automatische Bearbeitung: transkribiere automatisch ` +
+  const startPrompt = primaryVideo
+    ? `${downloadStep} Starte danach die automatische Bearbeitung: transkribiere automatisch ` +
       `(ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, schneide automatisch, brenne ` +
       `die erkannte Sprache als Untertitel, und baue anschliessend Animationen mit Hyperframes ` +
       `-- mit Brand default. Halte dich dabei an die Pflicht-Checkpoints aus CLAUDE.md ` +
       `(Cut-Plan-Bestaetigung auf Deutsch vor dem Schnitt, Storyboard-Freigabe vor den ` +
-      `Compositions, Self-Eval nach dem Render).`;
+      `Compositions, Self-Eval nach dem Render).`
+    : "";
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -93,108 +108,111 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       </a>
       <h1 className="mb-6 mt-2 text-xl font-semibold">{project.name}</h1>
 
-      {!hasVideo && <UploadForm slug={slug} />}
+      <div className="space-y-6">
+        <UploadForm slug={slug} />
 
-      {hasVideo && signedUrl && (
-        <div className="space-y-6">
+        {assetsWithUrls.length > 0 && (
           <div className="card">
-            <p className="text-sm text-white/50">{isImage ? "Bild" : "Video"}</p>
-            <p className="mt-1 font-medium">{project.video_filename}</p>
-            {isImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={signedUrl}
-                alt={project.name}
-                className="mt-3 max-h-96 w-full rounded-lg bg-black/20 object-contain"
-              />
+            <p className="label !mb-3">Dateien ({assetsWithUrls.length})</p>
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+              {assetsWithUrls.map((asset) =>
+                asset.previewUrl ? (
+                  <div key={asset.id}>
+                    <VideoThumbnail
+                      url={asset.previewUrl}
+                      isImage={asset.isImage}
+                      label={asset.filename}
+                      size={140}
+                    />
+                    <p className="mt-1 truncate text-xs text-white/40" title={asset.filename}>
+                      {asset.filename}
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    key={asset.id}
+                    className="flex h-[140px] w-[140px] items-center justify-center rounded-lg bg-black/20 text-xs text-red-400"
+                  >
+                    Link fehlt
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+        {primaryVideo && (
+          <div className="card space-y-4">
+            <div>
+              <p className="text-base font-semibold">Automatischer Video-Bearbeitungs-Worker</p>
+              <p className="mt-1 text-sm text-white/50">
+                Arbeitet mit <span className="text-white/70">{primaryVideo.filename}</span> (erstes
+                Video im Projekt). Ein lokaler Prozess auf deinem Rechner transkribiert, erkennt
+                Versprecher, schneidet und rendert automatisch -- fuer die Pflicht-Checkpoints
+                (Cut-Plan-Bestaetigung, Self-Eval) bekommst du hier eine Freigabe-Anfrage. Nutzt
+                echtes Claude-API- und ElevenLabs-Kontingent, sobald ein Auftrag laeuft -- nicht
+                im Claude-Code-Abo enthalten.
+              </p>
+            </div>
+
+            {!job || !jobIsActive ? (
+              <form action={startAutomatedJob.bind(null, slug)}>
+                <button type="submit" className="btn w-full py-3 text-base">
+                  ▶ Automatische Bearbeitung starten
+                </button>
+              </form>
             ) : (
-              <video
-                src={signedUrl}
-                controls
-                preload="metadata"
-                className="mt-3 w-full rounded-lg bg-black/20"
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <span className="badge bg-blue-500/15 text-blue-300">
+                  {JOB_STATUS_LABELS[job.status] ?? job.status}
+                </span>
+                {job.phase && <p className="mt-2 text-sm text-white/50">{job.phase}</p>}
+              </div>
+            )}
+
+            {job?.status === "failed" && <p className="text-sm text-red-400">{job.error_message}</p>}
+
+            {job?.status === "done" && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3">
+                <p className="text-sm font-medium text-emerald-300">Fertig</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-white/70">
+                  {job.result_summary_de}
+                </p>
+                {job.result_video_path && (
+                  <p className="mt-2 text-xs text-white/40">Lokale Datei: {job.result_video_path}</p>
+                )}
+              </div>
+            )}
+
+            {pendingCheckpoint && (
+              <CheckpointApproval
+                checkpointId={pendingCheckpoint.id}
+                slug={slug}
+                type={pendingCheckpoint.type}
+                titleDe={pendingCheckpoint.title_de}
+                summaryDe={pendingCheckpoint.summary_de}
+                payload={pendingCheckpoint.payload}
               />
             )}
           </div>
+        )}
 
-          {!isImage && (
-            <div className="card space-y-4">
-              <div>
-                <p className="text-base font-semibold">Automatischer Video-Bearbeitungs-Worker</p>
-                <p className="mt-1 text-sm text-white/50">
-                  Ein lokaler Prozess auf deinem Rechner transkribiert, erkennt Versprecher,
-                  schneidet und rendert automatisch -- fuer die Pflicht-Checkpoints (Cut-Plan-
-                  Bestaetigung, Self-Eval) bekommst du hier eine Freigabe-Anfrage. Nutzt echtes
-                  Claude-API- und ElevenLabs-Kontingent, sobald ein Auftrag laeuft -- nicht im
-                  Claude-Code-Abo enthalten.
-                </p>
-              </div>
-
-              {!job || !jobIsActive ? (
-                <form action={startAutomatedJob.bind(null, slug)}>
-                  <button type="submit" className="btn w-full py-3 text-base">
-                    ▶ Automatische Bearbeitung starten
-                  </button>
-                </form>
-              ) : (
-                <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                  <span className="badge bg-blue-500/15 text-blue-300">
-                    {JOB_STATUS_LABELS[job.status] ?? job.status}
-                  </span>
-                  {job.phase && <p className="mt-2 text-sm text-white/50">{job.phase}</p>}
-                </div>
-              )}
-
-              {job?.status === "failed" && (
-                <p className="text-sm text-red-400">{job.error_message}</p>
-              )}
-
-              {job?.status === "done" && (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3">
-                  <p className="text-sm font-medium text-emerald-300">Fertig</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-white/70">
-                    {job.result_summary_de}
-                  </p>
-                  {job.result_video_path && (
-                    <p className="mt-2 text-xs text-white/40">
-                      Lokale Datei: {job.result_video_path}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {pendingCheckpoint && (
-                <CheckpointApproval
-                  checkpointId={pendingCheckpoint.id}
-                  slug={slug}
-                  type={pendingCheckpoint.type}
-                  titleDe={pendingCheckpoint.title_de}
-                  summaryDe={pendingCheckpoint.summary_de}
-                  payload={pendingCheckpoint.payload}
-                />
-              )}
-            </div>
-          )}
-
+        {primaryVideo && (
           <div className="card space-y-4">
             <div>
-              <p className="text-base font-semibold">
-                {isImage ? "Bild-Animation starten" : "Manueller Modus (Fallback)"}
-              </p>
+              <p className="text-base font-semibold">Manueller Modus (Fallback)</p>
               <p className="mt-1 text-sm text-white/50">
-                {isImage
-                  ? "Kopiert den Befehl fuer Claude Code -- Download und Animation in einem Schritt."
-                  : "Kopiert den kompletten Auftrag zum manuellen Einfuegen in eine lokale " +
-                    "Claude-Code-Chat-Session, falls du nicht auf den automatischen Worker " +
-                    "warten willst."}
+                Kopiert den kompletten Auftrag fuer <span className="text-white/70">{primaryVideo.filename}</span> zum
+                manuellen Einfuegen in eine lokale Claude-Code-Chat-Session, falls du nicht auf
+                den automatischen Worker warten willst.
               </p>
             </div>
 
             <CopyButton
               text={startPrompt}
-              label={isImage ? "▶ Bild-Animation starten" : "Auftrag kopieren"}
+              label="Auftrag kopieren"
               copiedLabel="✓ Kopiert -- jetzt in Claude Code einfuegen"
-              className={isImage ? "btn w-full py-3 text-base" : "btn-secondary w-full"}
+              className="btn-secondary w-full"
             />
 
             <details className="text-sm text-white/50">
@@ -204,15 +222,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
               </pre>
             </details>
           </div>
-        </div>
-      )}
-
-      {hasVideo && !signedUrl && (
-        <p className="text-sm text-red-400">
-          Download-Link konnte nicht erzeugt werden -- Seite neu laden oder spaeter erneut
-          versuchen.
-        </p>
-      )}
+        )}
+      </div>
     </main>
   );
 }

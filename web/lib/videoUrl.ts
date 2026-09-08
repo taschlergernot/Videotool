@@ -4,31 +4,28 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createR2Client, R2_BUCKET } from "@/lib/r2";
 import { VIDEO_BUCKET } from "@/lib/constants";
 
-type ProjectStorageFields = {
-  video_storage_path: string | null;
-  video_r2_key: string | null;
+export type AssetStorageFields = {
+  storage_backend: "supabase" | "r2";
+  storage_path: string | null;
+  r2_key: string | null;
 };
 
-// Neue Uploads landen in R2, Bestandsuploads bleiben in Supabase Storage --
-// welches Feld gesetzt ist, entscheidet den Speicherort. Nie beide zugleich.
-export async function getProjectPreviewUrl(
+export async function getAssetPreviewUrl(
   supabase: SupabaseClient,
-  project: ProjectStorageFields,
+  asset: AssetStorageFields,
   expiresInSeconds = 60 * 60
 ): Promise<string | null> {
-  if (project.video_r2_key) {
+  if (asset.storage_backend === "r2" && asset.r2_key) {
     const r2 = createR2Client();
-    return getSignedUrl(
-      r2,
-      new GetObjectCommand({ Bucket: R2_BUCKET, Key: project.video_r2_key }),
-      { expiresIn: expiresInSeconds }
-    );
+    return getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: asset.r2_key }), {
+      expiresIn: expiresInSeconds,
+    });
   }
 
-  if (project.video_storage_path) {
+  if (asset.storage_backend === "supabase" && asset.storage_path) {
     const { data } = await supabase.storage
       .from(VIDEO_BUCKET)
-      .createSignedUrl(project.video_storage_path, expiresInSeconds);
+      .createSignedUrl(asset.storage_path, expiresInSeconds);
     return data?.signedUrl ?? null;
   }
 

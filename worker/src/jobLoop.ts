@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runAgentLeg } from "./claudeAgent.js";
+import { downloadPrimaryVideo } from "./downloadAsset.js";
 
 const RENDER_PATH_PATTERN = /RENDER_PATH:\s*(.+)/;
 
@@ -70,20 +71,44 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
 
   const { data: project } = await supabase
     .from("projects")
-    .select("slug, video_filename")
+    .select("slug")
     .eq("id", jobRow.project_id)
     .single();
 
-  if (!project?.video_filename) {
+  if (!project) {
     await supabase
       .from("jobs")
-      .update({ status: "failed", error_message: "Projekt hat keine hochgeladene Datei mehr." })
+      .update({ status: "failed", error_message: "Projekt nicht gefunden." })
+      .eq("id", jobRow.id);
+    return true;
+  }
+
+  let downloaded: Awaited<ReturnType<typeof downloadPrimaryVideo>>;
+  try {
+    downloaded = await downloadPrimaryVideo(supabase, jobRow.project_id, project.slug);
+  } catch (err) {
+    await supabase
+      .from("jobs")
+      .update({
+        status: "failed",
+        error_message: `Download der Video-Datei fehlgeschlagen: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      })
+      .eq("id", jobRow.id);
+    return true;
+  }
+
+  if (!downloaded) {
+    await supabase
+      .from("jobs")
+      .update({ status: "failed", error_message: "Projekt hat keine Video-Datei zum Bearbeiten." })
       .eq("id", jobRow.id);
     return true;
   }
 
   const sessionId = randomUUID();
-  const rawPath = `raw/${project.slug}/${project.video_filename}`;
+  const rawPath = downloaded.rawRelativePath;
 
   await supabase
     .from("jobs")
@@ -94,7 +119,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
     })
     .eq("id", jobRow.id);
 
-  console.log(`[worker] Job ${jobRow.id} gestartet (${rawPath})`);
+  console.log(`[worker] Job ${jobRow.id} gestartet (${rawPath}, lokal heruntergeladen)`);
 
   const outcome = await runAgentLeg({
     supabase,

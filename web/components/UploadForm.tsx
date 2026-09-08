@@ -7,7 +7,7 @@ import {
   getR2PartUploadUrl,
   completeR2MultipartUpload,
   abortR2MultipartUpload,
-  markR2VideoUploaded,
+  addR2Asset,
 } from "@/app/projects/r2Actions";
 
 // S3-Multipart-Minimum ist 5MB pro Part (ausser dem letzten) -- 10MB gibt
@@ -105,7 +105,8 @@ export function UploadForm({ slug }: { slug: string }) {
 
       setProgress(100);
       await completeR2MultipartUpload(key, uploadId, parts);
-      await markR2VideoUploaded(slug, key, file.name, file.size);
+      await addR2Asset(slug, key, file.name, file.size);
+      setStatus("idle");
       router.refresh();
     } catch (err) {
       setStatus("error");

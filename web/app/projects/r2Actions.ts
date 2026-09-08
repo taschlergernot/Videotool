@@ -30,7 +30,9 @@ export async function createR2MultipartUpload(
   contentType: string
 ): Promise<{ key: string; uploadId: string }> {
   const userId = await requireUserId();
-  const key = `${userId}/${slug}/${filename}`;
+  // Zufaellige ID im Pfad -- mehrere Assets im selben Projekt koennen
+  // denselben Dateinamen haben, ohne sich gegenseitig zu ueberschreiben.
+  const key = `${userId}/${slug}/${crypto.randomUUID()}-${filename}`;
 
   const r2 = createR2Client();
   const result = await r2.send(
@@ -88,7 +90,7 @@ export async function abortR2MultipartUpload(key: string, uploadId: string): Pro
   await r2.send(new AbortMultipartUploadCommand({ Bucket: R2_BUCKET, Key: key, UploadId: uploadId }));
 }
 
-export async function markR2VideoUploaded(
+export async function addR2Asset(
   slug: string,
   r2Key: string,
   filename: string,
@@ -96,15 +98,23 @@ export async function markR2VideoUploaded(
 ): Promise<void> {
   const supabase = await createClient();
 
-  const { error } = await supabase
+  const { data: project, error: projectError } = await supabase
     .from("projects")
-    .update({
-      video_r2_key: r2Key,
-      video_filename: filename,
-      video_size_bytes: sizeBytes,
-      video_uploaded_at: new Date().toISOString(),
-    })
-    .eq("slug", slug);
+    .select("id")
+    .eq("slug", slug)
+    .single();
+
+  if (projectError || !project) {
+    throw new Error("Projekt nicht gefunden.");
+  }
+
+  const { error } = await supabase.from("project_assets").insert({
+    project_id: project.id,
+    filename,
+    storage_backend: "r2",
+    r2_key: r2Key,
+    size_bytes: sizeBytes,
+  });
 
   if (error) {
     throw new Error(error.message);
