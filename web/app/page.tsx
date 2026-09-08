@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
 import { NewProjectForm } from "@/components/NewProjectForm";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
+import { createR2Client, R2_BUCKET } from "@/lib/r2";
 import { VIDEO_BUCKET, isImageFilename } from "@/lib/constants";
 
 export default async function DashboardPage() {
@@ -19,9 +22,10 @@ export default async function DashboardPage() {
 
   const { data: projects, error } = await supabase
     .from("projects")
-    .select("slug, name, video_filename, video_storage_path, created_at")
+    .select("slug, name, video_filename, video_storage_path, video_r2_key, created_at")
     .order("created_at", { ascending: false });
 
+  // Bestandsuploads: Supabase Storage, ein Batch-Call fuer alle auf einmal.
   const storagePaths = (projects ?? [])
     .map((p) => p.video_storage_path)
     .filter((path): path is string => Boolean(path));
@@ -33,9 +37,39 @@ export default async function DashboardPage() {
       .createSignedUrls(storagePaths, 60 * 60);
     signed?.forEach((entry) => {
       if (entry.signedUrl && !entry.error) {
-        previewUrls.set(entry.path ?? "", entry.signedUrl);
+        previewUrls.set(`supabase:${entry.path}`, entry.signedUrl);
       }
     });
+  }
+
+  // Neue Uploads: R2, kein Batch-Presign in der S3-API -- parallel einzeln.
+  const r2Keys = (projects ?? [])
+    .map((p) => p.video_r2_key)
+    .filter((key): key is string => Boolean(key));
+
+  if (r2Keys.length > 0) {
+    const r2 = createR2Client();
+    const results = await Promise.all(
+      r2Keys.map(async (key) => {
+        try {
+          const url = await getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }), {
+            expiresIn: 60 * 60,
+          });
+          return [key, url] as const;
+        } catch {
+          return [key, null] as const;
+        }
+      })
+    );
+    results.forEach(([key, url]) => {
+      if (url) previewUrls.set(`r2:${key}`, url);
+    });
+  }
+
+  function previewUrlFor(p: { video_storage_path: string | null; video_r2_key: string | null }) {
+    if (p.video_r2_key) return previewUrls.get(`r2:${p.video_r2_key}`);
+    if (p.video_storage_path) return previewUrls.get(`supabase:${p.video_storage_path}`);
+    return undefined;
   }
 
   return (
@@ -73,9 +107,8 @@ export default async function DashboardPage() {
             </thead>
             <tbody>
               {projects.map((p) => {
-                const previewUrl = p.video_storage_path
-                  ? previewUrls.get(p.video_storage_path)
-                  : undefined;
+                const previewUrl = previewUrlFor(p);
+                const hasVideo = Boolean(p.video_storage_path || p.video_r2_key);
                 const isImage = p.video_filename ? isImageFilename(p.video_filename) : false;
                 const date = new Date(p.created_at).toLocaleDateString("de-DE", {
                   day: "2-digit",
@@ -103,12 +136,10 @@ export default async function DashboardPage() {
                     <td className="p-3 align-top">
                       <span
                         className={`badge ${
-                          p.video_storage_path
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-white/10 text-white/50"
+                          hasVideo ? "bg-emerald-500/15 text-emerald-300" : "bg-white/10 text-white/50"
                         }`}
                       >
-                        {p.video_storage_path ? "hochgeladen" : "leer"}
+                        {hasVideo ? "hochgeladen" : "leer"}
                       </span>
                     </td>
                   </tr>

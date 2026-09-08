@@ -2,10 +2,37 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import * as tus from "tus-js-client";
-import { createClient } from "@/lib/supabase/client";
-import { VIDEO_BUCKET } from "@/lib/constants";
-import { markVideoUploaded } from "@/app/projects/actions";
+import {
+  createR2MultipartUpload,
+  getR2PartUploadUrl,
+  completeR2MultipartUpload,
+  abortR2MultipartUpload,
+  markR2VideoUploaded,
+} from "@/app/projects/r2Actions";
+
+// S3-Multipart-Minimum ist 5MB pro Part (ausser dem letzten) -- 10MB gibt
+// Marge und haelt die Anzahl Presigned-URL-Requests bei Multi-GB-Dateien
+// vernuenftig klein.
+const PART_SIZE = 10 * 1024 * 1024;
+const MAX_PART_RETRIES = 3;
+
+async function uploadPart(url: string, blob: Blob, attempt = 1): Promise<string> {
+  try {
+    const res = await fetch(url, { method: "PUT", body: blob });
+    if (!res.ok) {
+      throw new Error(`Part-Upload fehlgeschlagen: HTTP ${res.status}`);
+    }
+    const etag = res.headers.get("ETag");
+    if (!etag) {
+      throw new Error("Keine ETag in der Antwort -- CORS ExposeHeaders pruefen.");
+    }
+    return etag;
+  } catch (err) {
+    if (attempt >= MAX_PART_RETRIES) throw err;
+    await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    return uploadPart(url, blob, attempt + 1);
+  }
+}
 
 export function UploadForm({ slug }: { slug: string }) {
   const [progress, setProgress] = useState(0);
@@ -18,65 +45,41 @@ export function UploadForm({ slug }: { slug: string }) {
     setErrorMessage("");
     setProgress(0);
 
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    let key: string | undefined;
+    let uploadId: string | undefined;
 
-    if (!session) {
+    try {
+      const created = await createR2MultipartUpload(slug, file.name, file.type);
+      key = created.key;
+      uploadId = created.uploadId;
+
+      const totalParts = Math.ceil(file.size / PART_SIZE);
+      const parts: { PartNumber: number; ETag: string }[] = [];
+
+      for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+        const start = (partNumber - 1) * PART_SIZE;
+        const blob = file.slice(start, Math.min(start + PART_SIZE, file.size));
+
+        const url = await getR2PartUploadUrl(key, uploadId, partNumber);
+        const etag = await uploadPart(url, blob);
+        parts.push({ PartNumber: partNumber, ETag: etag });
+
+        setProgress(Math.round((partNumber / totalParts) * 100));
+      }
+
+      await completeR2MultipartUpload(key, uploadId, parts);
+      await markR2VideoUploaded(slug, key, file.name, file.size);
+      router.refresh();
+    } catch (err) {
       setStatus("error");
-      setErrorMessage("Session abgelaufen -- bitte neu anmelden.");
-      return;
+      setErrorMessage(err instanceof Error ? err.message : "Unbekannter Fehler.");
+      if (key && uploadId) {
+        await abortR2MultipartUpload(key, uploadId).catch(() => {
+          // Bestes Bemuehen -- ein verwaister Multipart-Upload raeumt sich
+          // in R2 nach ein paar Tagen von selbst auf, kein Blocker.
+        });
+      }
     }
-
-    // Supabase Storage's resumable-upload (TUS) endpoint lives on a
-    // dedicated *.storage.supabase.co host, not the main project URL.
-    const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseProjectRef = new URL(projectUrl).hostname.split(".")[0];
-    const objectName = `${session.user.id}/${slug}/${file.name}`;
-
-    const upload = new tus.Upload(file, {
-      endpoint: `https://${supabaseProjectRef}.storage.supabase.co/storage/v1/upload/resumable`,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      headers: {
-        authorization: `Bearer ${session.access_token}`,
-        "x-upsert": "true",
-      },
-      uploadDataDuringCreation: true,
-      removeFingerprintOnSuccess: true,
-      metadata: {
-        bucketName: VIDEO_BUCKET,
-        objectName,
-        contentType: file.type || "application/octet-stream",
-        cacheControl: "3600",
-      },
-      // Supabase requires exactly 6MB chunks for resumable uploads (as of
-      // their current docs) -- do not change this.
-      chunkSize: 6 * 1024 * 1024,
-      onError: (error) => {
-        setStatus("error");
-        setErrorMessage(error.message);
-      },
-      onProgress: (bytesUploaded, bytesTotal) => {
-        setProgress(Math.round((bytesUploaded / bytesTotal) * 100));
-      },
-      onSuccess: async () => {
-        try {
-          await markVideoUploaded(slug, objectName, file.name, file.size);
-          router.refresh();
-        } catch (err) {
-          setStatus("error");
-          setErrorMessage(err instanceof Error ? err.message : "Unbekannter Fehler.");
-        }
-      },
-    });
-
-    const previousUploads = await upload.findPreviousUploads();
-    if (previousUploads.length > 0) {
-      upload.resumeFromPreviousUpload(previousUploads[0]);
-    }
-
-    upload.start();
   }
 
   return (

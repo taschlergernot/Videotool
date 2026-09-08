@@ -165,3 +165,14 @@ begin
   return claimed;
 end;
 $$;
+
+-- ============================================================================
+-- Cloudflare R2 als Speicher fuer neue (grosse) Video-Uploads. Bestehende
+-- Uploads bleiben in video_storage_path (Supabase Storage) -- beide Spalten
+-- laufen parallel, welche gesetzt ist entscheidet den Speicherort. R2 kennt
+-- kein auth.uid()/RLS -- die Zugriffskontrolle passiert serverseitig in den
+-- Server Actions (web/app/projects/r2Actions.ts), die vor jedem Presigned-URL
+-- pruefen, dass ein Nutzer eingeloggt ist.
+-- ============================================================================
+
+alter table public.projects add column if not exists video_r2_key text;

@@ -5,7 +5,8 @@ import { CopyButton } from "@/components/CopyButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { CheckpointApproval } from "@/components/CheckpointApproval";
 import { startAutomatedJob } from "@/app/projects/actions";
-import { VIDEO_BUCKET, isImageFilename } from "@/lib/constants";
+import { getProjectPreviewUrl } from "@/lib/videoUrl";
+import { isImageFilename } from "@/lib/constants";
 
 const JOB_STATUS_LABELS: Record<string, string> = {
   queued: "In der Warteschlange",
@@ -33,16 +34,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     notFound();
   }
 
-  const hasVideo = Boolean(project.video_storage_path);
+  const hasVideo = Boolean(project.video_storage_path || project.video_r2_key);
   const isImage = hasVideo && isImageFilename(project.video_filename ?? "");
 
-  let signedUrl: string | null = null;
-  if (hasVideo) {
-    const { data } = await supabase.storage
-      .from(VIDEO_BUCKET)
-      .createSignedUrl(project.video_storage_path, 60 * 60 * 24);
-    signedUrl = data?.signedUrl ?? null;
-  }
+  const signedUrl = hasVideo ? await getProjectPreviewUrl(supabase, project, 60 * 60 * 24) : null;
 
   const { data: job } = await supabase
     .from("jobs")
