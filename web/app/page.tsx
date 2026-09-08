@@ -39,7 +39,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
+    <main className="mx-auto max-w-4xl p-6">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Projekte</h1>
@@ -54,40 +54,70 @@ export default async function DashboardPage() {
 
       <NewProjectForm />
 
-      {error && (
-        <p className="text-sm text-red-400">Projekte konnten nicht geladen werden.</p>
+      {error && <p className="text-sm text-red-400">Projekte konnten nicht geladen werden.</p>}
+
+      {projects?.length === 0 && (
+        <p className="text-sm text-white/40">Noch keine Projekte -- leg oben eins an.</p>
       )}
 
-      <div className="space-y-4">
-        {projects?.length === 0 && (
-          <p className="text-sm text-white/40">Noch keine Projekte -- leg oben eins an.</p>
-        )}
-        {projects?.map((p) => {
-          const previewUrl = p.video_storage_path ? previewUrls.get(p.video_storage_path) : undefined;
-          const isImage = p.video_filename ? isImageFilename(p.video_filename) : false;
+      {projects && projects.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-white/10">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/[0.03] text-white/50">
+                <th className="p-3 font-medium">Vorschau</th>
+                <th className="p-3 font-medium">Name</th>
+                <th className="p-3 font-medium">Datum</th>
+                <th className="p-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((p) => {
+                const previewUrl = p.video_storage_path
+                  ? previewUrls.get(p.video_storage_path)
+                  : undefined;
+                const isImage = p.video_filename ? isImageFilename(p.video_filename) : false;
+                const date = new Date(p.created_at).toLocaleDateString("de-DE", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                });
 
-          return (
-            <div key={p.slug} className="card">
-              <div className="flex items-center justify-between">
-                <Link href={`/projects/${p.slug}`} className="font-medium hover:underline">
-                  {p.name}
-                </Link>
-                <span
-                  className={`badge ${
-                    p.video_storage_path
-                      ? "bg-emerald-500/15 text-emerald-300"
-                      : "bg-white/10 text-white/50"
-                  }`}
-                >
-                  {p.video_storage_path ? "hochgeladen" : "leer"}
-                </span>
-              </div>
-
-              {previewUrl && <VideoThumbnail url={previewUrl} isImage={isImage} label={p.name} />}
-            </div>
-          );
-        })}
-      </div>
+                return (
+                  <tr key={p.slug} className="border-b border-white/5 last:border-0">
+                    <td className="p-3">
+                      {previewUrl ? (
+                        <VideoThumbnail url={previewUrl} isImage={isImage} label={p.name} size={200} />
+                      ) : (
+                        <div className="flex h-[200px] w-[200px] items-center justify-center rounded-lg bg-black/20 text-xs text-white/30">
+                          kein Upload
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3 align-top">
+                      <Link href={`/projects/${p.slug}`} className="font-medium hover:underline">
+                        {p.name}
+                      </Link>
+                    </td>
+                    <td className="p-3 align-top text-white/60">{date}</td>
+                    <td className="p-3 align-top">
+                      <span
+                        className={`badge ${
+                          p.video_storage_path
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : "bg-white/10 text-white/50"
+                        }`}
+                      >
+                        {p.video_storage_path ? "hochgeladen" : "leer"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }

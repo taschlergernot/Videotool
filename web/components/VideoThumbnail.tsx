@@ -6,10 +6,13 @@ export function VideoThumbnail({
   url,
   isImage,
   label,
+  size,
 }: {
   url: string;
   isImage: boolean;
   label: string;
+  /** Quadratische Groesse in px statt der vollbreiten 160px-Standardhoehe. */
+  size?: number;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -27,15 +30,27 @@ export function VideoThumbnail({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group relative mt-3 block w-full overflow-hidden rounded-lg bg-black/20"
+        className={`group relative block overflow-hidden rounded-lg bg-black/20 ${
+          size ? "shrink-0" : "mt-3 w-full"
+        }`}
+        style={size ? { width: size, height: size } : undefined}
       >
         {isImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={label} className="h-40 w-full object-cover" />
+          <img
+            src={url}
+            alt={label}
+            className={size ? "h-full w-full object-cover" : "h-40 w-full object-cover"}
+          />
         ) : (
           // Kein `controls` -- das hier ist nur die Miniaturansicht (zeigt den
           // ersten Frame sobald die Metadaten geladen sind), kein Player.
-          <video src={url} muted preload="metadata" className="h-40 w-full object-cover" />
+          <video
+            src={url}
+            muted
+            preload="metadata"
+            className={size ? "h-full w-full object-cover" : "h-40 w-full object-cover"}
+          />
         )}
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
           <span className="rounded-full bg-black/70 px-3 py-1 text-xs text-white">Ansehen</span>
