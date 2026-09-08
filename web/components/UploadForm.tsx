@@ -15,22 +15,55 @@ import {
 // vernuenftig klein.
 const PART_SIZE = 10 * 1024 * 1024;
 const MAX_PART_RETRIES = 3;
+// Wenn eine einzelne Part-Anfrage laenger als das braucht, ist etwas
+// haengen geblieben (totes CORS-Preflight, Netzwerkabbruch ohne sauberen
+// Fehler) -- ohne das wuerde die UI unbegrenzt bei "haengt" stehen bleiben,
+// statt einen Fehler zu zeigen.
+const PART_TIMEOUT_MS = 5 * 60 * 1000;
 
-async function uploadPart(url: string, blob: Blob, attempt = 1): Promise<string> {
+function uploadPartOnce(url: string, blob: Blob, onProgress: (loaded: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.timeout = PART_TIMEOUT_MS;
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`Part-Upload fehlgeschlagen: HTTP ${xhr.status}`));
+        return;
+      }
+      const etag = xhr.getResponseHeader("ETag");
+      if (!etag) {
+        reject(new Error("Keine ETag in der Antwort -- CORS ExposeHeaders pruefen."));
+        return;
+      }
+      resolve(etag);
+    };
+
+    xhr.onerror = () => reject(new Error("Netzwerkfehler beim Part-Upload (CORS oder Verbindung pruefen)."));
+    xhr.ontimeout = () => reject(new Error(`Part-Upload haengt -- kein Fortschritt nach ${PART_TIMEOUT_MS / 1000}s.`));
+
+    xhr.send(blob);
+  });
+}
+
+async function uploadPart(
+  url: string,
+  blob: Blob,
+  onProgress: (loaded: number) => void,
+  attempt = 1
+): Promise<string> {
   try {
-    const res = await fetch(url, { method: "PUT", body: blob });
-    if (!res.ok) {
-      throw new Error(`Part-Upload fehlgeschlagen: HTTP ${res.status}`);
-    }
-    const etag = res.headers.get("ETag");
-    if (!etag) {
-      throw new Error("Keine ETag in der Antwort -- CORS ExposeHeaders pruefen.");
-    }
-    return etag;
+    return await uploadPartOnce(url, blob, onProgress);
   } catch (err) {
     if (attempt >= MAX_PART_RETRIES) throw err;
+    onProgress(0);
     await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
-    return uploadPart(url, blob, attempt + 1);
+    return uploadPart(url, blob, onProgress, attempt + 1);
   }
 }
 
@@ -55,18 +88,22 @@ export function UploadForm({ slug }: { slug: string }) {
 
       const totalParts = Math.ceil(file.size / PART_SIZE);
       const parts: { PartNumber: number; ETag: string }[] = [];
+      let bytesDoneBeforeCurrentPart = 0;
 
       for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
         const start = (partNumber - 1) * PART_SIZE;
         const blob = file.slice(start, Math.min(start + PART_SIZE, file.size));
 
         const url = await getR2PartUploadUrl(key, uploadId, partNumber);
-        const etag = await uploadPart(url, blob);
+        const etag = await uploadPart(url, blob, (loaded) => {
+          const total = bytesDoneBeforeCurrentPart + loaded;
+          setProgress(Math.min(99, Math.round((total / file.size) * 100)));
+        });
         parts.push({ PartNumber: partNumber, ETag: etag });
-
-        setProgress(Math.round((partNumber / totalParts) * 100));
+        bytesDoneBeforeCurrentPart += blob.size;
       }
 
+      setProgress(100);
       await completeR2MultipartUpload(key, uploadId, parts);
       await markR2VideoUploaded(slug, key, file.name, file.size);
       router.refresh();
