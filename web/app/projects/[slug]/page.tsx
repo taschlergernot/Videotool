@@ -105,6 +105,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           <div className="card">
             <p className="text-sm text-white/50">{isImage ? "Bild" : "Video"}</p>
             <p className="mt-1 font-medium">{project.video_filename}</p>
+            {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={signedUrl}
+                alt={project.name}
+                className="mt-3 max-h-96 w-full rounded-lg bg-black/20 object-contain"
+              />
+            ) : (
+              <video
+                src={signedUrl}
+                controls
+                preload="metadata"
+                className="mt-3 w-full rounded-lg bg-black/20"
+              />
+            )}
           </div>
 
           {!isImage && (

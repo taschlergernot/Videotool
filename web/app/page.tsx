@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
 import { NewProjectForm } from "@/components/NewProjectForm";
+import { VIDEO_BUCKET, isImageFilename } from "@/lib/constants";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -17,8 +18,24 @@ export default async function DashboardPage() {
 
   const { data: projects, error } = await supabase
     .from("projects")
-    .select("slug, name, video_storage_path, created_at")
+    .select("slug, name, video_filename, video_storage_path, created_at")
     .order("created_at", { ascending: false });
+
+  const storagePaths = (projects ?? [])
+    .map((p) => p.video_storage_path)
+    .filter((path): path is string => Boolean(path));
+
+  const previewUrls = new Map<string, string>();
+  if (storagePaths.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from(VIDEO_BUCKET)
+      .createSignedUrls(storagePaths, 60 * 60);
+    signed?.forEach((entry) => {
+      if (entry.signedUrl && !entry.error) {
+        previewUrls.set(entry.path ?? "", entry.signedUrl);
+      }
+    });
+  }
 
   return (
     <main className="mx-auto max-w-3xl p-6">
@@ -40,28 +57,50 @@ export default async function DashboardPage() {
         <p className="text-sm text-red-400">Projekte konnten nicht geladen werden.</p>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-4">
         {projects?.length === 0 && (
           <p className="text-sm text-white/40">Noch keine Projekte -- leg oben eins an.</p>
         )}
-        {projects?.map((p) => (
-          <Link
-            key={p.slug}
-            href={`/projects/${p.slug}`}
-            className="card flex items-center justify-between transition hover:border-white/20"
-          >
-            <span className="font-medium">{p.name}</span>
-            <span
-              className={`badge ${
-                p.video_storage_path
-                  ? "bg-emerald-500/15 text-emerald-300"
-                  : "bg-white/10 text-white/50"
-              }`}
-            >
-              {p.video_storage_path ? "hochgeladen" : "leer"}
-            </span>
-          </Link>
-        ))}
+        {projects?.map((p) => {
+          const previewUrl = p.video_storage_path ? previewUrls.get(p.video_storage_path) : undefined;
+          const isImage = p.video_filename ? isImageFilename(p.video_filename) : false;
+
+          return (
+            <div key={p.slug} className="card">
+              <div className="flex items-center justify-between">
+                <Link href={`/projects/${p.slug}`} className="font-medium hover:underline">
+                  {p.name}
+                </Link>
+                <span
+                  className={`badge ${
+                    p.video_storage_path
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-white/10 text-white/50"
+                  }`}
+                >
+                  {p.video_storage_path ? "hochgeladen" : "leer"}
+                </span>
+              </div>
+
+              {previewUrl &&
+                (isImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt={p.name}
+                    className="mt-3 max-h-72 w-full rounded-lg bg-black/20 object-contain"
+                  />
+                ) : (
+                  <video
+                    src={previewUrl}
+                    controls
+                    preload="metadata"
+                    className="mt-3 w-full rounded-lg bg-black/20"
+                  />
+                ))}
+            </div>
+          );
+        })}
       </div>
     </main>
   );
