@@ -39,6 +39,22 @@ export async function createProject(_prevState: string | undefined, formData: Fo
   return "Konnte keinen freien Projektnamen finden -- bitte einen anderen Namen waehlen.";
 }
 
+export async function deleteProject(slug: string) {
+  const supabase = await createClient();
+
+  // project_assets/jobs/job_checkpoints haengen alle per "on delete cascade"
+  // an projects.id (schema.sql) -- ein Delete hier raeumt die DB-Seite
+  // komplett auf. R2-Objekte selbst bleiben liegen (kein Auto-Cleanup dort),
+  // das ist ein bekannter, akzeptierter Lueckenpunkt fuer diese erste Version.
+  const { error } = await supabase.from("projects").delete().eq("slug", slug);
+
+  if (error) {
+    throw new Error(`Projekt konnte nicht geloescht werden: ${error.message}`);
+  }
+
+  redirect("/");
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();

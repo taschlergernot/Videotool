@@ -5,6 +5,7 @@ import { signOut } from "./actions";
 import { NewProjectForm } from "@/components/NewProjectForm";
 import { Nav } from "@/components/Nav";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
+import { DeleteProjectButton } from "@/components/DeleteProjectButton";
 import { getAssetPreviewUrl } from "@/lib/videoUrl";
 import { isImageFilename } from "@/lib/constants";
 
@@ -83,6 +84,7 @@ export default async function DashboardPage() {
                 <th className="p-3 font-medium">Name</th>
                 <th className="p-3 font-medium">Datum</th>
                 <th className="p-3 font-medium">Status</th>
+                <th className="p-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -120,6 +122,9 @@ export default async function DashboardPage() {
                       >
                         {p.assetCount > 0 ? `${p.assetCount} Datei${p.assetCount > 1 ? "en" : ""}` : "leer"}
                       </span>
+                    </td>
+                    <td className="p-3 align-top">
+                      <DeleteProjectButton slug={p.slug} projectName={p.name} />
                     </td>
                   </tr>
                 );

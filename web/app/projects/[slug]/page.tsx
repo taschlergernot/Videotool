@@ -6,6 +6,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { CheckpointApproval } from "@/components/CheckpointApproval";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { startAutomatedJob } from "@/app/projects/actions";
+import { DeleteProjectButton } from "@/components/DeleteProjectButton";
 import { getAssetPreviewUrl } from "@/lib/videoUrl";
 import { isImageFilename } from "@/lib/constants";
 
@@ -106,7 +107,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <a href="/" className="text-sm text-white/50 hover:text-white/80">
         ← Projekte
       </a>
-      <h1 className="mb-6 mt-2 text-xl font-semibold">{project.name}</h1>
+      <div className="mb-6 mt-2 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">{project.name}</h1>
+        <DeleteProjectButton slug={slug} projectName={project.name} className="btn-secondary" />
+      </div>
 
       <div className="space-y-6">
         <UploadForm slug={slug} />
