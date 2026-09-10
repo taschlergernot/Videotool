@@ -76,7 +76,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
     return false;
   }
 
-  const jobRow = job as { id: string; project_id: string };
+  const jobRow = job as { id: string; project_id: string; owner_id: string };
 
   const { data: project } = await supabase
     .from("projects")
@@ -133,6 +133,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
   const outcome = await runAgentLeg({
     supabase,
     jobId: jobRow.id,
+    ownerId: jobRow.owner_id,
     prompt: buildInitialPrompt(rawPath),
     sessionId,
     resume: false,
@@ -146,7 +147,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
 async function tryResumeAwaitingJob(supabase: SupabaseClient): Promise<boolean> {
   const { data: jobs } = await supabase
     .from("jobs")
-    .select("id, claude_session_id")
+    .select("id, claude_session_id, owner_id")
     .eq("status", "awaiting_approval")
     .order("updated_at", { ascending: true })
     .limit(5);
@@ -155,7 +156,7 @@ async function tryResumeAwaitingJob(supabase: SupabaseClient): Promise<boolean> 
     return false;
   }
 
-  for (const job of jobs as { id: string; claude_session_id: string | null }[]) {
+  for (const job of jobs as { id: string; claude_session_id: string | null; owner_id: string }[]) {
     const { data: checkpoint } = await supabase
       .from("job_checkpoints")
       .select("*")
@@ -201,6 +202,7 @@ async function tryResumeAwaitingJob(supabase: SupabaseClient): Promise<boolean> 
     const outcome = await runAgentLeg({
       supabase,
       jobId: job.id,
+      ownerId: job.owner_id,
       prompt: "",
       sessionId: job.claude_session_id,
       resume: true,

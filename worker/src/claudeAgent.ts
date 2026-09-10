@@ -55,11 +55,12 @@ async function* emptyResumePrompt(): AsyncIterable<never> {}
 export async function runAgentLeg(params: {
   supabase: SupabaseClient;
   jobId: string;
+  ownerId: string;
   prompt: string;
   sessionId: string;
   resume: boolean;
 }): Promise<AgentLegOutcome> {
-  const { supabase, jobId, prompt, sessionId, resume } = params;
+  const { supabase, jobId, ownerId, prompt, sessionId, resume } = params;
 
   const options: Options = {
     cwd: "C:\\Videotool",
@@ -75,7 +76,7 @@ export async function runAgentLeg(params: {
       PreToolUse: [
         {
           matcher: "Write",
-          hooks: [createCheckpointHook(supabase, jobId)],
+          hooks: [createCheckpointHook(supabase, jobId, ownerId)],
         },
       ],
     },

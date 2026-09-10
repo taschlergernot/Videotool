@@ -39,7 +39,11 @@ function defer(): SyncHookJSONOutput {
 // query() sauber (kein offener Prozess); ein spaeterer Aufruf mit derselben
 // tool_use_id (nach `resume`) prueft den DB-Status und gibt allow/deny/erneut
 // defer zurueck. Jeder Write auf einen anderen Pfad laeuft normal durch.
-export function createCheckpointHook(supabase: SupabaseClient, jobId: string): HookCallback {
+export function createCheckpointHook(
+  supabase: SupabaseClient,
+  jobId: string,
+  ownerId: string
+): HookCallback {
   return async (input, toolUseID) => {
     const hookInput = input as PreToolUseHookInput;
     const filePath = String((hookInput.tool_input as { file_path?: string })?.file_path ?? "");
@@ -70,8 +74,16 @@ export function createCheckpointHook(supabase: SupabaseClient, jobId: string): H
         .select("id", { count: "exact", head: true })
         .eq("job_id", jobId);
 
-      await supabase.from("job_checkpoints").insert({
+      // owner_id defaultet in der Tabelle auf auth.uid() -- das ist unter dem
+      // service_role-Key, mit dem der Worker laeuft, immer null (kein JWT-
+      // Kontext). Ohne den Wert hier explizit mitzugeben, schlaegt der Insert
+      // an der not-null-Constraint fehl -- lange unbemerkt, weil der Fehler
+      // nirgends geprueft wurde (echter Bug, gefunden nach dem ersten
+      // erfolgreichen "deferred"-Testlauf: Job stand auf awaiting_approval,
+      // aber job_checkpoints war komplett leer).
+      const { error: insertError } = await supabase.from("job_checkpoints").insert({
         job_id: jobId,
+        owner_id: ownerId,
         seq: (count ?? 0) + 1,
         type: checkpointType,
         title_de: body.title_de,
@@ -79,6 +91,10 @@ export function createCheckpointHook(supabase: SupabaseClient, jobId: string): H
         payload: body.payload ?? {},
         tool_use_id: toolUseId,
       });
+
+      if (insertError) {
+        console.error(`[worker] job_checkpoints-Insert fehlgeschlagen: ${insertError.message}`);
+      }
 
       await supabase.from("jobs").update({ status: "awaiting_approval" }).eq("id", jobId);
 
