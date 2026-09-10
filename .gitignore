@@ -41,6 +41,10 @@ projects/*/takes_packed.md
 projects/*/output_transcript.md
 projects/*/output_transcript.json
 
+# Worker-Checkpoint-Transportdateien (siehe worker/src/checkpointHook.ts) --
+# reine Steuerdateien, kein Projekt-Inhalt.
+.worker_checkpoints/
+
 # Caches
 .hyperframes-cache/
 

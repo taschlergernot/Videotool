@@ -1,9 +1,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { CanUseTool, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createCheckpointMcpServer, CHECKPOINT_SERVER_NAME } from "./checkpointTool.js";
-import { createCheckpointHook, CHECKPOINT_HOOK_MATCHER } from "./checkpointHook.js";
-import { SYSTEM_PROMPT_ADDENDUM } from "./systemPromptAddendum.js";
+import { createCheckpointHook } from "./checkpointHook.js";
+import { buildSystemPromptAddendum } from "./systemPromptAddendum.js";
 
 // Nur die in CLAUDE.md dokumentierten Befehle -- alles andere wird
 // automatisch abgelehnt, ohne dass jemand da sein muss um zu entscheiden.
@@ -16,14 +15,6 @@ const ALLOWED_BASH_PREFIXES = [
 ];
 
 const allowlistCanUseTool: CanUseTool = async (toolName, input) => {
-  // Der Checkpoint-Mechanismus selbst muss durch -- das IST der kontrollierte
-  // Pflicht-Checkpoint, keine freie Aktion. Ohne diesen Fall wuerde canUseTool
-  // ihn wie jedes andere unbekannte Tool ablehnen und der Agent kaeme nie bis
-  // zur Freigabe-Anfrage (echter Bug, per erstem Testlauf gefunden).
-  if (toolName === CHECKPOINT_HOOK_MATCHER) {
-    return { behavior: "allow", updatedInput: input };
-  }
-
   if (toolName === "Bash") {
     const rawCmd = String((input as { command?: string }).command ?? "").trim();
     // Ein fuehrendes "cd <pfad> && " ist kein Sicherheitsrisiko (ffmpeg/curl/
@@ -76,21 +67,14 @@ export async function runAgentLeg(params: {
     systemPrompt: {
       type: "preset",
       preset: "claude_code",
-      append: SYSTEM_PROMPT_ADDENDUM,
+      append: buildSystemPromptAddendum(jobId),
     },
     disallowedTools: ["AskUserQuestion"],
     canUseTool: allowlistCanUseTool,
-    mcpServers: {
-      // alwaysLoad wird in checkpointTool.ts's createSdkMcpServer(...)-Aufruf
-      // gesetzt -- McpSdkServerConfigWithInstance (der Rueckgabetyp) hat kein
-      // eigenes alwaysLoad-Feld (TS bestaetigt das), das gehoert nur zu den
-      // Optionen von createSdkMcpServer selbst.
-      [CHECKPOINT_SERVER_NAME]: createCheckpointMcpServer(),
-    },
     hooks: {
       PreToolUse: [
         {
-          matcher: CHECKPOINT_HOOK_MATCHER,
+          matcher: "Write",
           hooks: [createCheckpointHook(supabase, jobId)],
         },
       ],

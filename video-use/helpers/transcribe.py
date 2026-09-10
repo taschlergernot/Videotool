@@ -81,6 +81,38 @@ def extract_audio(video_path: Path, dest: Path, audio_track: int = 0) -> None:
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def _system_ca_bundle() -> str | None:
+    """Combined certifi + Windows ROOT/CA store, cached on disk.
+
+    Mirrors ``uv --system-certs``: this machine sits behind TLS interception
+    (proxy or AV with HTTPS scanning) whose root cert lives only in the
+    Windows cert store, not in certifi's bundled roots. ``requests`` has no
+    ``--system-certs`` equivalent, so we build one ourselves.
+    """
+    if sys.platform != "win32":
+        return None
+
+    import ssl
+
+    cache = Path(__file__).resolve().parent.parent / ".cache" / "system_cacert.pem"
+    if cache.exists():
+        return str(cache)
+
+    try:
+        import certifi
+
+        pem_lines = [Path(certifi.where()).read_text(encoding="utf-8")]
+        for store in ("ROOT", "CA"):
+            for der, _encoding, _trust in ssl.enum_certificates(store):
+                cert = ssl.DER_cert_to_PEM_cert(der)
+                pem_lines.append(cert)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text("\n".join(pem_lines), encoding="utf-8")
+        return str(cache)
+    except Exception:
+        return None
+
+
 def call_scribe(
     audio_path: Path,
     api_key: str,
@@ -105,6 +137,7 @@ def call_scribe(
             files={"file": (audio_path.name, f, "audio/wav")},
             data=data,
             timeout=1800,
+            verify=_system_ca_bundle() or True,
         )
 
     if resp.status_code != 200:

@@ -6,14 +6,23 @@ import { downloadPrimaryVideo } from "./downloadAsset.js";
 const RENDER_PATH_PATTERN = /RENDER_PATH:\s*(.+)/;
 
 function buildInitialPrompt(rawVideoRelativePath: string): string {
+  // Nutzer hat am 2026-09-10 explizit fuer dieses Projekt 16:9 statt des
+  // CLAUDE.md-9:16-Defaults verlangt ("es ist alles im querformat brauche
+  // aber 16:9"). Kein globaler Default-Wechsel -- nur dieser eine Auftrag.
+  const formatOverride = rawVideoRelativePath.includes("wohnung-schwarzau")
+    ? " WICHTIG: Fuer dieses Projekt rendere in 16:9 (1920x1080), NICHT im 9:16-Standard aus " +
+      "CLAUDE.md -- der Nutzer hat das fuer dieses Projekt am 2026-09-10 explizit verlangt."
+    : "";
+
   return (
     `Fuehre fuer ${rawVideoRelativePath} den video-use-Teil des CLAUDE.md-Workflows aus: ` +
     `transkribiere (ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, baue die EDL ` +
-    `mit _padding_params, hole ueber submit_checkpoint eine Cut-Plan-Bestaetigung ein, render ` +
-    `dann, und hole danach ueber submit_checkpoint eine Self-Eval-Bestaetigung ein. Beende den ` +
-    `Auftrag nach dem Self-Eval-Checkpoint -- keine Hyperframes-Compositions in diesem Lauf. ` +
-    `Schreib als letzte Zeile deiner Abschluss-Nachricht exakt "RENDER_PATH: <Pfad>" mit dem ` +
-    `Pfad der fertig geschnittenen Datei relativ zum Projekt-Root.`
+    `mit _padding_params, hole die Cut-Plan-Bestaetigung ueber den in deinem System-Prompt ` +
+    `beschriebenen Checkpoint-Mechanismus (Write nach .worker_checkpoints/<jobId>/cut_plan.json) ` +
+    `ein, render dann, und hole danach die Self-Eval-Bestaetigung genauso ein (self_eval.json). ` +
+    `Beende den Auftrag nach dem Self-Eval-Checkpoint -- keine Hyperframes-Compositions in ` +
+    `diesem Lauf.${formatOverride} Schreib als letzte Zeile deiner Abschluss-Nachricht exakt ` +
+    `"RENDER_PATH: <Pfad>" mit dem Pfad der fertig geschnittenen Datei relativ zum Projekt-Root.`
   );
 }
 
