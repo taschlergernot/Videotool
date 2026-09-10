@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./actions";
 import { NewProjectForm } from "@/components/NewProjectForm";
+import { Nav } from "@/components/Nav";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { getAssetPreviewUrl } from "@/lib/videoUrl";
 import { isImageFilename } from "@/lib/constants";
@@ -51,6 +52,8 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-4xl p-6">
+      <Nav />
+
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Projekte</h1>
