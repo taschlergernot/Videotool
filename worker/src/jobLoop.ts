@@ -82,7 +82,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
     return false;
   }
 
-  const jobRow = job as { id: string; project_id: string; owner_id: string };
+  const jobRow = job as { id: string; project_id: string; owner_id: string; custom_prompt: string | null };
 
   const { data: project } = await supabase
     .from("projects")
@@ -148,13 +148,21 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
     })
     .eq("id", jobRow.id);
 
-  console.log(`[worker] Job ${jobRow.id} gestartet (${rawPath}, lokal heruntergeladen)`);
+  const prompt = jobRow.custom_prompt?.trim()
+    ? jobRow.custom_prompt.trim()
+    : buildInitialPrompt(rawPath, musicPath);
+
+  console.log(
+    `[worker] Job ${jobRow.id} gestartet (${rawPath}, lokal heruntergeladen${
+      jobRow.custom_prompt?.trim() ? ", eigener Auftrag" : ""
+    })`
+  );
 
   const outcome = await runAgentLeg({
     supabase,
     jobId: jobRow.id,
     ownerId: jobRow.owner_id,
-    prompt: buildInitialPrompt(rawPath, musicPath),
+    prompt,
     sessionId,
     resume: false,
   });

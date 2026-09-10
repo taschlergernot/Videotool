@@ -193,7 +193,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
             </div>
 
             {!job || !jobIsActive ? (
-              <form action={startAutomatedJob.bind(null, slug)}>
+              <form action={startAutomatedJob.bind(null, slug)} className="space-y-3">
+                <div>
+                  <label htmlFor="prompt" className="label">
+                    Eigener Auftrag (optional)
+                  </label>
+                  <textarea
+                    id="prompt"
+                    name="prompt"
+                    rows={6}
+                    placeholder="Leer lassen fuer den Standard-Auftrag (transkribieren, schneiden, rendern nach CLAUDE.md). Oder hier einen eigenen, vollstaendigen Auftrag formulieren -- er ersetzt dann den Standard-Auftrag komplett."
+                    className="input min-h-[120px] resize-y font-mono text-xs"
+                  />
+                </div>
                 <button type="submit" className="btn w-full py-3 text-base">
                   ▶ Automatische Bearbeitung starten
                 </button>

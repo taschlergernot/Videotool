@@ -28,7 +28,7 @@ export async function markVideoUploaded(
   revalidatePath(`/projects/${slug}`);
 }
 
-export async function startAutomatedJob(slug: string) {
+export async function startAutomatedJob(slug: string, formData: FormData) {
   const supabase = await createClient();
 
   const { data: project, error: projectError } = await supabase
@@ -41,9 +41,12 @@ export async function startAutomatedJob(slug: string) {
     throw new Error("Projekt nicht gefunden.");
   }
 
+  const customPrompt = String(formData.get("prompt") ?? "").trim();
+
   const { error } = await supabase.from("jobs").insert({
     project_id: project.id,
     status: "queued",
+    custom_prompt: customPrompt || null,
   });
 
   if (error) {

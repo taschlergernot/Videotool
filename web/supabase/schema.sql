@@ -297,3 +297,13 @@ create policy "owner_full_access"
 
 alter table public.projects add column if not exists music_track_id uuid
   references public.music_tracks(id) on delete set null;
+
+-- Eigener, vollstaendiger Auftrag statt des generierten Standard-Prompts
+-- (2026-09-10) -- Freitext-Feld auf der Projektseite, ersetzt buildInitialPrompt
+-- komplett, wenn gesetzt. Siehe worker/src/jobLoop.ts::tryClaimAndStartJob.
+alter table public.jobs add column if not exists custom_prompt text;
+
+-- Projekt-spezifische Brand-Auswahl (2026-09-10) -- brand_frames traegt jetzt
+-- mehrere benannte Brands (nicht nur "default"), Projekte waehlen eine davon.
+alter table public.projects add column if not exists brand_frame_id uuid
+  references public.brand_frames(id) on delete set null;
