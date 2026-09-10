@@ -18,6 +18,11 @@ export function createCheckpointMcpServer() {
   return createSdkMcpServer({
     name: CHECKPOINT_SERVER_NAME,
     version: "1.0.0",
+    // Ohne das werden SDK-MCP-Tools per Default "deferred" (hinter einer
+    // ToolSearch versteckt, erst beim ersten Turn evtl. noch nicht geladen).
+    // Zwei echte Testlaeufe sind genau daran gescheitert -- No such tool
+    // available -- trotz korrektem Namen und korrekter canUseTool-Freigabe.
+    alwaysLoad: true,
     tools: [
       tool(
         CHECKPOINT_TOOL_NAME,
@@ -28,7 +33,8 @@ export function createCheckpointMcpServer() {
         checkpointInputShape,
         async () => ({
           content: [{ type: "text" as const, text: "Checkpoint freigegeben." }],
-        })
+        }),
+        { alwaysLoad: true }
       ),
     ],
   });

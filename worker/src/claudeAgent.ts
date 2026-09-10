@@ -25,9 +25,14 @@ const allowlistCanUseTool: CanUseTool = async (toolName, input) => {
   }
 
   if (toolName === "Bash") {
-    const cmd = String((input as { command?: string }).command ?? "").trim();
+    const rawCmd = String((input as { command?: string }).command ?? "").trim();
+    // Ein fuehrendes "cd <pfad> && " ist kein Sicherheitsrisiko (ffmpeg/curl/
+    // uv koennen ohnehin nur das, was sie koennen) -- ohne diesen Abzug
+    // lehnte die Allowlist jeden Befehl mit Arbeitsverzeichniswechsel ab,
+    // dokumentierter Nebenfund aus dem ersten echten Testlauf.
+    const cmd = rawCmd.replace(/^cd\s+\S+\s*(&&|;)\s*/, "");
     if (!ALLOWED_BASH_PREFIXES.some((re) => re.test(cmd))) {
-      return { behavior: "deny", message: `Befehl nicht in der Allowlist: ${cmd}` };
+      return { behavior: "deny", message: `Befehl nicht in der Allowlist: ${rawCmd}` };
     }
     return { behavior: "allow", updatedInput: input };
   }
@@ -76,6 +81,10 @@ export async function runAgentLeg(params: {
     disallowedTools: ["AskUserQuestion"],
     canUseTool: allowlistCanUseTool,
     mcpServers: {
+      // alwaysLoad wird in checkpointTool.ts's createSdkMcpServer(...)-Aufruf
+      // gesetzt -- McpSdkServerConfigWithInstance (der Rueckgabetyp) hat kein
+      // eigenes alwaysLoad-Feld (TS bestaetigt das), das gehoert nur zu den
+      // Optionen von createSdkMcpServer selbst.
       [CHECKPOINT_SERVER_NAME]: createCheckpointMcpServer(),
     },
     hooks: {
