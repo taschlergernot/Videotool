@@ -1,17 +1,23 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { runAgentLeg } from "./claudeAgent.js";
-import { downloadPrimaryVideo } from "./downloadAsset.js";
+import { downloadPrimaryVideo, downloadSelectedMusic } from "./downloadAsset.js";
 
 const RENDER_PATH_PATTERN = /RENDER_PATH:\s*(.+)/;
 
-function buildInitialPrompt(rawVideoRelativePath: string): string {
+function buildInitialPrompt(rawVideoRelativePath: string, musicRelativePath: string | null): string {
   // Nutzer hat am 2026-09-10 explizit fuer dieses Projekt 16:9 statt des
   // CLAUDE.md-9:16-Defaults verlangt ("es ist alles im querformat brauche
   // aber 16:9"). Kein globaler Default-Wechsel -- nur dieser eine Auftrag.
   const formatOverride = rawVideoRelativePath.includes("wohnung-schwarzau")
     ? " WICHTIG: Fuer dieses Projekt rendere in 16:9 (1920x1080), NICHT im 9:16-Standard aus " +
       "CLAUDE.md -- der Nutzer hat das fuer dieses Projekt am 2026-09-10 explizit verlangt."
+    : "";
+
+  const musicStep = musicRelativePath
+    ? ` Unter ${musicRelativePath} liegt die vom Nutzer in der Web-App ausgewaehlte Hintergrundmusik ` +
+      `fuer dieses Projekt -- lege sie beim finalen Render leise unter das Video (deutlich leiser als ` +
+      `jede Sprache/Stimme im Video, sauber ein-/ausgeblendet, nicht laenger als das Video selbst).`
     : "";
 
   return (
@@ -21,8 +27,8 @@ function buildInitialPrompt(rawVideoRelativePath: string): string {
     `beschriebenen Checkpoint-Mechanismus (Write nach .worker_checkpoints/<jobId>/cut_plan.json) ` +
     `ein, render dann, und hole danach die Self-Eval-Bestaetigung genauso ein (self_eval.json). ` +
     `Beende den Auftrag nach dem Self-Eval-Checkpoint -- keine Hyperframes-Compositions in ` +
-    `diesem Lauf.${formatOverride} Schreib als letzte Zeile deiner Abschluss-Nachricht exakt ` +
-    `"RENDER_PATH: <Pfad>" mit dem Pfad der fertig geschnittenen Datei relativ zum Projekt-Root.`
+    `diesem Lauf.${formatOverride}${musicStep} Schreib als letzte Zeile deiner Abschluss-Nachricht ` +
+    `exakt "RENDER_PATH: <Pfad>" mit dem Pfad der fertig geschnittenen Datei relativ zum Projekt-Root.`
   );
 }
 
@@ -80,7 +86,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
 
   const { data: project } = await supabase
     .from("projects")
-    .select("slug")
+    .select("slug, music_track_id")
     .eq("id", jobRow.project_id)
     .single();
 
@@ -116,6 +122,20 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
     return true;
   }
 
+  let musicPath: string | null = null;
+  if (project.music_track_id) {
+    try {
+      const music = await downloadSelectedMusic(supabase, project.music_track_id);
+      musicPath = music?.relativePath ?? null;
+    } catch (err) {
+      // Fehlende/kaputte Musik soll den Auftrag nicht blockieren -- Video-Schnitt
+      // ist die Pflicht, Hintergrundmusik ist ein Extra.
+      console.error(`[worker] Musik-Download fehlgeschlagen (wird ohne Musik fortgesetzt): ${
+        err instanceof Error ? err.message : String(err)
+      }`);
+    }
+  }
+
   const sessionId = randomUUID();
   const rawPath = downloaded.rawRelativePath;
 
@@ -134,7 +154,7 @@ async function tryClaimAndStartJob(supabase: SupabaseClient, workerPid: string):
     supabase,
     jobId: jobRow.id,
     ownerId: jobRow.owner_id,
-    prompt: buildInitialPrompt(rawPath),
+    prompt: buildInitialPrompt(rawPath, musicPath),
     sessionId,
     resume: false,
   });

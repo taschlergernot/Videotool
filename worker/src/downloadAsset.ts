@@ -90,3 +90,61 @@ export async function downloadPrimaryVideo(
 
   return { filename: primaryVideo.filename, rawRelativePath };
 }
+
+type MusicTrack = {
+  filename: string;
+  storage_backend: "supabase" | "r2";
+  storage_path: string | null;
+  r2_key: string | null;
+};
+
+// Gleiches Prinzip wie downloadPrimaryVideo: der Agent selbst hat laut
+// Allowlist keinen R2/Supabase-Zugriff, also laedt der Orchestrator den vom
+// Nutzer in der Web-App ausgewaehlten Track VOR dem Agent-Lauf lokal herunter.
+export async function downloadSelectedMusic(
+  supabase: SupabaseClient,
+  musicTrackId: string
+): Promise<{ filename: string; relativePath: string } | null> {
+  const { data: track } = await supabase
+    .from("music_tracks")
+    .select("filename, storage_backend, storage_path, r2_key")
+    .eq("id", musicTrackId)
+    .maybeSingle();
+
+  if (!track) {
+    return null;
+  }
+  const t = track as MusicTrack;
+
+  let url: string;
+  if (t.storage_backend === "r2" && t.r2_key) {
+    const r2 = createR2Client();
+    url = await getSignedUrl(r2, new GetObjectCommand({ Bucket: R2_BUCKET, Key: t.r2_key }), {
+      expiresIn: 60 * 30,
+    });
+  } else if (t.storage_backend === "supabase" && t.storage_path) {
+    const { data, error } = await supabase.storage
+      .from(VIDEO_STORAGE_BUCKET)
+      .createSignedUrl(t.storage_path, 60 * 30);
+    if (error || !data?.signedUrl) {
+      throw new Error(`Supabase Signed URL fehlgeschlagen: ${error?.message ?? "kein Link"}`);
+    }
+    url = data.signedUrl;
+  } else {
+    throw new Error(`Musik-Track ${t.filename} hat weder r2_key noch storage_path.`);
+  }
+
+  const relativePath = `music/${t.filename}`;
+  const localPath = join(VIDEOTOOL_ROOT, "music", t.filename);
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Download fehlgeschlagen: HTTP ${res.status}`);
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  await mkdir(dirname(localPath), { recursive: true });
+  await writeFile(localPath, buffer);
+
+  return { filename: t.filename, relativePath };
+}

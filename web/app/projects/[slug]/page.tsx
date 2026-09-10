@@ -7,6 +7,7 @@ import { CheckpointApproval } from "@/components/CheckpointApproval";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { startAutomatedJob } from "@/app/projects/actions";
 import { DeleteProjectButton } from "@/components/DeleteProjectButton";
+import { MusicPicker } from "@/components/MusicPicker";
 import { getAssetPreviewUrl } from "@/lib/videoUrl";
 import { isImageFilename } from "@/lib/constants";
 
@@ -55,6 +56,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   // (nicht Bild) im Projekt gilt als die primaere Datei dafuer.
   const primaryVideo = assetsWithUrls.find((a) => !a.isImage);
 
+  const { data: musicTracks } = await supabase
+    .from("music_tracks")
+    .select("*")
+    .order("uploaded_at", { ascending: true });
+
+  const musicTracksWithUrls = await Promise.all(
+    (musicTracks ?? []).map(async (track) => ({
+      id: track.id as string,
+      filename: track.filename as string,
+      previewUrl: await getAssetPreviewUrl(supabase, track, 60 * 60 * 24),
+      durationSeconds: track.duration_seconds as number | null,
+    }))
+  );
+
+  const selectedTrack = musicTracksWithUrls.find((t) => t.id === project.music_track_id);
+
   const { data: job } = await supabase
     .from("jobs")
     .select("*")
@@ -91,13 +108,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       `Invoke-WebRequest -Uri "${primaryVideo.previewUrl}" -OutFile "raw\\${slug}\\${primaryVideo.filename}").`
     : "";
 
+  const musicStep = selectedTrack?.previewUrl
+    ? ` Lade ausserdem die ausgewaehlte Musik von ${selectedTrack.previewUrl} nach ` +
+      `music/${selectedTrack.filename} herunter (PowerShell: New-Item -ItemType Directory -Force ` +
+      `music | Out-Null; Invoke-WebRequest -Uri "${selectedTrack.previewUrl}" -OutFile ` +
+      `"music\\${selectedTrack.filename}") und lege sie beim Rendern als Hintergrundmusik unter ` +
+      `das Video (leiser als jede Sprache/Stimme, sauber ein-/ausgeblendet).`
+    : "";
+
   const startPrompt = primaryVideo
-    ? `${downloadStep} Starte danach die automatische Bearbeitung: transkribiere automatisch ` +
-      `(ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, schneide automatisch, brenne ` +
-      `die erkannte Sprache als Untertitel, und baue anschliessend Animationen mit Hyperframes ` +
-      `-- mit Brand default. Halte dich dabei an die Pflicht-Checkpoints aus CLAUDE.md ` +
-      `(Cut-Plan-Bestaetigung auf Deutsch vor dem Schnitt, Storyboard-Freigabe vor den ` +
-      `Compositions, Self-Eval nach dem Render).`
+    ? `${downloadStep}${musicStep} Starte danach die automatische Bearbeitung: transkribiere ` +
+      `automatisch (ElevenLabs Scribe), erkenne Fuellwoerter und Versprecher, schneide ` +
+      `automatisch, brenne die erkannte Sprache als Untertitel, und baue anschliessend ` +
+      `Animationen mit Hyperframes -- mit Brand default. Halte dich dabei an die ` +
+      `Pflicht-Checkpoints aus CLAUDE.md (Cut-Plan-Bestaetigung auf Deutsch vor dem Schnitt, ` +
+      `Storyboard-Freigabe vor den Compositions, Self-Eval nach dem Render).`
     : "";
 
   return (
@@ -144,6 +169,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
         )}
+
+        <div className="card">
+          <p className="label !mb-1">Musik</p>
+          <p className="mb-3 text-sm text-white/50">
+            Auswahl gilt fuer dieses Projekt -- wird beim Rendern als Hintergrundmusik verwendet.
+          </p>
+          <MusicPicker slug={slug} tracks={musicTracksWithUrls} selectedTrackId={project.music_track_id} />
+        </div>
 
         {primaryVideo && (
           <div className="card space-y-4">

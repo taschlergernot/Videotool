@@ -41,6 +41,13 @@ projects/*/takes_packed.md
 projects/*/output_transcript.md
 projects/*/output_transcript.json
 
+# Musikbibliothek -- lokale Originale + vom Worker heruntergeladene Kopien
+# (worker/src/downloadAsset.ts::downloadSelectedMusic), nie committen. Die
+# eigentliche Ablage ist R2 (music_tracks-Tabelle), das hier ist nur Cache.
+music/*.mp3
+music/*.wav
+music/*.m4a
+
 # Worker-Checkpoint-Transportdateien (siehe worker/src/checkpointHook.ts) --
 # reine Steuerdateien, kein Projekt-Inhalt.
 .worker_checkpoints/

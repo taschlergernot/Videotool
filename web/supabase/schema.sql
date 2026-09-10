@@ -266,3 +266,34 @@ where p.video_filename is not null
     select 1 from public.project_assets a
     where a.project_id = p.id and a.filename = p.video_filename
   );
+
+-- ============================================================================
+-- Musikbibliothek pro Nutzer + Musikauswahl pro Projekt (2026-09-10).
+-- Tracks sind global (ein Nutzer, eine gemeinsame Bibliothek), nicht an ein
+-- einzelnes Projekt gebunden -- jedes Projekt waehlt daraus genau einen aus.
+-- ============================================================================
+
+create table if not exists public.music_tracks (
+  id                uuid primary key default gen_random_uuid(),
+  owner_id          uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  filename          text not null,
+  storage_backend   text not null check (storage_backend in ('supabase', 'r2')),
+  storage_path      text,   -- gesetzt wenn storage_backend = 'supabase'
+  r2_key            text,   -- gesetzt wenn storage_backend = 'r2'
+  duration_seconds  double precision,
+  size_bytes        bigint,
+  uploaded_at       timestamptz not null default now(),
+  created_at        timestamptz not null default now()
+);
+
+alter table public.music_tracks enable row level security;
+
+drop policy if exists "owner_full_access" on public.music_tracks;
+create policy "owner_full_access"
+  on public.music_tracks
+  for all
+  using (auth.uid() = owner_id)
+  with check (auth.uid() = owner_id);
+
+alter table public.projects add column if not exists music_track_id uuid
+  references public.music_tracks(id) on delete set null;
