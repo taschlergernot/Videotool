@@ -94,7 +94,8 @@ export async function addR2Asset(
   slug: string,
   r2Key: string,
   filename: string,
-  sizeBytes: number
+  sizeBytes: number,
+  meta?: { durationSeconds?: number; width?: number; height?: number }
 ): Promise<void> {
   const supabase = await createClient();
 
@@ -114,6 +115,9 @@ export async function addR2Asset(
     storage_backend: "r2",
     r2_key: r2Key,
     size_bytes: sizeBytes,
+    duration_seconds: meta?.durationSeconds ?? null,
+    width: meta?.width ?? null,
+    height: meta?.height ?? null,
   });
 
   if (error) {

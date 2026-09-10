@@ -51,6 +51,46 @@ function uploadPartOnce(url: string, blob: Blob, onProgress: (loaded: number) =>
   });
 }
 
+function readMediaMeta(file: File): Promise<{ durationSeconds?: number; width?: number; height?: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const cleanup = () => URL.revokeObjectURL(url);
+
+    if (file.type.startsWith("video/")) {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        resolve({ durationSeconds: video.duration, width: video.videoWidth, height: video.videoHeight });
+        cleanup();
+      };
+      // Kaputte/unlesbare Datei soll den Upload nicht blockieren -- Meta bleibt leer.
+      video.onerror = () => {
+        resolve({});
+        cleanup();
+      };
+      video.src = url;
+      return;
+    }
+
+    if (file.type.startsWith("image/")) {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        cleanup();
+      };
+      img.onerror = () => {
+        resolve({});
+        cleanup();
+      };
+      img.src = url;
+      return;
+    }
+
+    cleanup();
+    resolve({});
+  });
+}
+
 async function uploadPart(
   url: string,
   blob: Blob,
@@ -105,7 +145,8 @@ export function UploadForm({ slug }: { slug: string }) {
 
       setProgress(100);
       await completeR2MultipartUpload(key, uploadId, parts);
-      await addR2Asset(slug, key, file.name, file.size);
+      const meta = await readMediaMeta(file);
+      await addR2Asset(slug, key, file.name, file.size, meta);
       setStatus("idle");
       router.refresh();
     } catch (err) {

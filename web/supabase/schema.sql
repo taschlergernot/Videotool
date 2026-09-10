@@ -207,6 +207,17 @@ create policy "owner_full_access"
   using (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
 
+-- ============================================================================
+-- Dauer/Format fuer die "Fertige Videos"-Tabelle (2026-09-10). Client liest
+-- diese Werte beim Upload aus dem HTMLVideoElement/HTMLImageElement aus und
+-- schickt sie mit -- kein serverseitiges ffprobe fuer den Upload-Pfad noetig.
+-- Nullable, weil bereits hochgeladene Alt-Assets diese Werte nicht haben.
+-- ============================================================================
+
+alter table public.project_assets add column if not exists duration_seconds double precision;
+alter table public.project_assets add column if not exists width int;
+alter table public.project_assets add column if not exists height int;
+
 -- Einmalige Migration: bestehende Einzel-Datei pro Projekt als ersten Asset
 -- uebernehmen. "where not exists" macht das Skript sicher mehrfach ausfuehrbar.
 insert into public.project_assets

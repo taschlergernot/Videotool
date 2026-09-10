@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { getAssetPreviewUrl } from "@/lib/videoUrl";
 import { isImageFilename } from "@/lib/constants";
+import { formatDuration, formatDimensions } from "@/lib/formatMedia";
 
 export default async function MediaPage() {
   const supabase = await createClient();
@@ -31,7 +32,7 @@ export default async function MediaPage() {
   );
 
   return (
-    <main className="mx-auto max-w-4xl p-6">
+    <main className="mx-auto max-w-5xl p-6">
       <Nav />
 
       <h1 className="mb-6 text-xl font-semibold">Fertige Videos</h1>
@@ -42,45 +43,70 @@ export default async function MediaPage() {
         <p className="text-sm text-white/40">Noch keine hochgeladenen Dateien.</p>
       )}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {assetsWithUrls.map((asset) => {
-          const project = asset.projects as { name: string; slug: string } | null;
-          const date = new Date(asset.uploaded_at).toLocaleDateString("de-DE", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-          });
+      {assetsWithUrls.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-white/10">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/[0.03] text-white/50">
+                <th className="p-3 font-medium">Vorschau</th>
+                <th className="p-3 font-medium">Name</th>
+                <th className="p-3 font-medium">Projekt</th>
+                <th className="p-3 font-medium">Dauer</th>
+                <th className="p-3 font-medium">Format</th>
+                <th className="p-3 font-medium">Datum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assetsWithUrls.map((asset) => {
+                const project = asset.projects as { name: string; slug: string } | null;
+                const date = new Date(asset.uploaded_at).toLocaleDateString("de-DE", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                });
 
-          return (
-            <div key={asset.id} className="card">
-              {asset.previewUrl ? (
-                <VideoThumbnail
-                  url={asset.previewUrl}
-                  isImage={asset.isImage}
-                  label={asset.filename}
-                  size={undefined}
-                />
-              ) : (
-                <div className="flex h-40 items-center justify-center rounded-lg bg-black/20 text-xs text-red-400">
-                  Link fehlt
-                </div>
-              )}
-              <p className="mt-2 truncate text-sm font-medium" title={asset.filename}>
-                {asset.filename}
-              </p>
-              {project && (
-                <Link
-                  href={`/projects/${project.slug}`}
-                  className="text-xs text-white/50 hover:text-white/80 hover:underline"
-                >
-                  {project.name}
-                </Link>
-              )}
-              <p className="text-xs text-white/30">{date}</p>
-            </div>
-          );
-        })}
-      </div>
+                return (
+                  <tr key={asset.id} className="border-b border-white/5 last:border-0">
+                    <td className="p-3">
+                      {asset.previewUrl ? (
+                        <VideoThumbnail
+                          url={asset.previewUrl}
+                          isImage={asset.isImage}
+                          label={asset.filename}
+                          size={96}
+                        />
+                      ) : (
+                        <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-black/20 text-xs text-red-400">
+                          Link fehlt
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-3 align-top font-medium" title={asset.filename}>
+                      {asset.filename}
+                    </td>
+                    <td className="p-3 align-top text-white/60">
+                      {project ? (
+                        <Link href={`/projects/${project.slug}`} className="hover:underline">
+                          {project.name}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="p-3 align-top text-white/60">
+                      {asset.isImage ? "—" : formatDuration(asset.duration_seconds)}
+                    </td>
+                    <td className="p-3 align-top text-white/60">
+                      {formatDimensions(asset.width, asset.height)}
+                    </td>
+                    <td className="p-3 align-top text-white/60">{date}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }
