@@ -218,6 +218,39 @@ alter table public.project_assets add column if not exists duration_seconds doub
 alter table public.project_assets add column if not exists width int;
 alter table public.project_assets add column if not exists height int;
 
+-- ============================================================================
+-- Brand-Frame-Definitionen (2026-09-10) -- ein Markdown-Dokument pro Brand
+-- (nach dem "frame.md" fuer Hyperframes), das Farben/Schriften/Design-Regeln
+-- im selben CSS-Custom-Property-Stil traegt wie brand-guidelines/default/*.md
+-- im Repo. Web-App speichert/zeigt es nur -- der lokale Worker/Hyperframes-
+-- Prozess liest weiterhin aus brand-guidelines/ auf der Platte, das hier ist
+-- kein Ersatz dafuer, sondern der bequeme Ablage-/Vorschau-Ort in der UI.
+-- Ein einzelner Nutzer, "name" haelt trotzdem die Tuer fuer mehrere Brands offen.
+-- ============================================================================
+
+create table if not exists public.brand_frames (
+  id          uuid primary key default gen_random_uuid(),
+  owner_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name        text not null default 'default',
+  content     text not null default '',
+  updated_at  timestamptz not null default now(),
+  created_at  timestamptz not null default now(),
+  unique (owner_id, name)
+);
+
+alter table public.brand_frames enable row level security;
+
+drop policy if exists "owner_full_access" on public.brand_frames;
+create policy "owner_full_access"
+  on public.brand_frames
+  for all
+  using (auth.uid() = owner_id)
+  with check (auth.uid() = owner_id);
+
+drop trigger if exists brand_frames_set_updated_at on public.brand_frames;
+create trigger brand_frames_set_updated_at before update on public.brand_frames
+  for each row execute function public.set_updated_at();
+
 -- Einmalige Migration: bestehende Einzel-Datei pro Projekt als ersten Asset
 -- uebernehmen. "where not exists" macht das Skript sicher mehrfach ausfuehrbar.
 insert into public.project_assets

@@ -27,4 +27,41 @@
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium;
   }
+
+  /* Minimaler Markdown-Renderer fuer die Brand-Seite (marked-Output) -- kein
+     Typography-Plugin installiert, deshalb per Hand statt @tailwindcss/typography. */
+  .md-content h1 {
+    @apply mb-3 mt-6 text-lg font-semibold text-white first:mt-0;
+  }
+  .md-content h2 {
+    @apply mb-2 mt-5 text-base font-semibold text-white first:mt-0;
+  }
+  .md-content h3 {
+    @apply mb-2 mt-4 text-sm font-semibold text-white/90;
+  }
+  .md-content p {
+    @apply mb-3 text-sm leading-relaxed text-white/70;
+  }
+  .md-content ul {
+    @apply mb-3 list-disc space-y-1 pl-5 text-sm text-white/70;
+  }
+  .md-content code {
+    @apply rounded bg-black/30 px-1 py-0.5 text-xs;
+  }
+  .md-content pre {
+    @apply mb-3 overflow-x-auto rounded-lg bg-black/40 p-3 text-xs text-white/80;
+  }
+  .md-content pre code {
+    @apply bg-transparent p-0;
+  }
+  .md-content table {
+    @apply mb-3 w-full border-collapse text-xs;
+  }
+  .md-content th,
+  .md-content td {
+    @apply border border-white/10 p-2 text-left text-white/70;
+  }
+  .md-content blockquote {
+    @apply mb-3 border-l-2 border-white/20 pl-3 text-sm italic text-white/50;
+  }
 }

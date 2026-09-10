@@ -9,6 +9,9 @@ export function Nav() {
       <Link href="/media" className="text-white/70 hover:text-white">
         Fertige Videos
       </Link>
+      <Link href="/brand" className="text-white/70 hover:text-white">
+        Brand
+      </Link>
     </nav>
   );
 }
